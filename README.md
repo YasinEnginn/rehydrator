@@ -1,72 +1,345 @@
-# BIL304 HW3 Contiki-NG Firmware Pair
+# BIL304 HW3 - CC1352R Donanim Uyarlama Notu
 
-## Purpose
+Bu proje, donanim uzerinde OTA surecinin 3. is parcacigini gostermek icin
+hazirlanmis iki Contiki-NG firmware imajindan olusur:
 
-This project provides a pair of firmware images for analyzing the transition between two versions of an application. It is designed to be used with the "Rehydrator" analysis tool for the BIL304 Operating Systems course.
+- `old-firmware`: cihaza aktif uygulama olarak yuklenir.
+- `new-firmware`: aktif uygulama olarak degil, flash icindeki staging/data
+  alanina kaydedilecek yeni imaj olarak paketlenir.
 
-## Folder Location
+Bu README yalnizca odevin 3. kismi olan **CC1352R gercekleme ve donanim
+uyarlama** sorularina cevap verir. Teknik dayanak olarak `MCU.pdf`
+belgesindeki CC13x2/CC26x2 Technical Reference Manual kullanilmistir.
 
-Copy or mount this project folder under your Contiki-NG tree. For consistency with the Makefile configuration, it is recommended to place it under `examples/bil304-hw3`:
+## Kaynak Dokuman Ozeti
 
-```sh
-cp -r rehydrator /path/to/contiki-ng/examples/bil304-hw3
-cd /path/to/contiki-ng/examples/bil304-hw3
+`MCU.pdf` belgesinde kullanilan ana bolumler:
+
+| MCU.pdf sayfasi | Kullanilan bilgi |
+| ---: | --- |
+| 69-70 | SRAM, flash, ROM ve seri bootloader ozeti |
+| 310-311 | Program flash, SRAM ve CCFG bellek haritasi |
+| 638-646 | VIMS, flash/cache/GPRAM, flash yazma/silme kurallari |
+| 793-797 | ROM bootloader isleyisi ve paket protokolu |
+| 811-835 | CCFG, bootloader ayarlari, erase ayarlari ve image-valid bilgisi |
+
+Bu sayfalara gore CC1352R ailesinde:
+
+- Ana cekirdek Arm Cortex-M4F mimarisindedir.
+- Program flash bellegi `0x00000000` adresinden baslar.
+- SRAM `0x20000000` adresinden baslar.
+- CCFG, cihaz konfigurasyon alanidir ve uygulama tarafindan ayarlanir.
+- ROM icinde seri bootloader bulunur.
+- Flash yazma/silme islemleri sayfa/sektor sinirlari dikkate alinarak
+  yapilmalidir.
+
+Bu projede kullanilan yerlesim `hw3_layout.h` icinde tanimlidir.
+
+## 1. CC1352R Bellek Kapasiteleri
+
+`MCU.pdf` teknik referansina gore ilgili bellekler:
+
+| Bellek | Kapasite | Rol |
+| --- | ---: | --- |
+| Flash | 352 KiB | Program kodu, sabit veriler ve kalici veri |
+| SRAM | 80 KiB | Calisma zamani stack, heap ve tamponlar |
+| Cache / GPRAM | 8 KiB | Flash cache veya genel amacli RAM |
+| ROM | 255 KiB | Boot kodu, ROM fonksiyonlari ve seri bootloader |
+
+Flash bellek 8 KiB'lik sayfalar halinde organize edilir. Bu nedenle staging,
+metadata ve CCFG gibi alanlar 8 KiB sinirlarina hizalanmistir.
+
+## 2. Bu Projedeki Flash Yerlesimi
+
+`hw3_layout.h` dosyasindaki bolumleme:
+
+| Alan | Baslangic | Bitis | Boyut | Kullanim |
+| --- | ---: | ---: | ---: | --- |
+| Active app | `0x00000000` | `0x0002FFFF` | 192 KiB | Calisan `old-firmware` |
+| New image staging | `0x00030000` | `0x00051FFF` | 136 KiB | Paketlenmis `new-firmware` |
+| Update metadata | `0x00052000` | `0x00053FFF` | 8 KiB | Imaj durumu, surum, CRC vb. |
+| Recovery/reserved | `0x00054000` | `0x00055FFF` | 8 KiB | Kurtarma veya yedek amacli alan |
+| CCFG flash sektoru | `0x00056000` | `0x00057FFF` | 8 KiB | Kritik cihaz konfigurasyonu |
+
+Toplam:
+
+```text
+192 KiB + 136 KiB + 8 KiB + 8 KiB + 8 KiB = 352 KiB
 ```
 
-In the `Makefile`, the path to the Contiki-NG root directory should match your directory depth:
+Bu yerlesim cihazdaki 352 KiB flash kapasitesini tam olarak kapsar.
+
+## 3. Uygulamanin Calisan Ana Imaji Nereye Yerlesir?
+
+Ana uygulama `0x00000000` adresinden baslayan active app alanina yerlesir.
+Bu projede aktif calisan firmware `old-firmware` dosyasidir.
+
+Neden `0x00000000`?
+
+- Arm Cortex-M tabanli sistemlerde reset sonrasi vektor tablosu flash basindan
+  okunur.
+- CCFG icindeki image-valid ayari, ROM boot kodunun hangi flash imajina kontrol
+  devredecegini belirler.
+- Standart flash imajlarinda vektor tablosu genellikle `0x00000000`
+  adresindedir.
+
+Bu nedenle `old-firmware.hex`, UniFlash ile aktif uygulama olarak yazilacak
+dosyadir.
+
+## 4. Diske Kaydedilecek Yeni Imaj Hangi Alana Yazilir?
+
+Yeni firmware aktif uygulama olarak yazilmaz. Bu projede yeni imaj staging
+alanina yazilir:
+
+```text
+0x00030000 - 0x00051FFF
+```
+
+Bu alan `HW3_NEW_IMAGE_BASE` ve `HW3_NEW_IMAGE_SIZE` ile tanimlidir.
+`new-firmware` once binary hale getirilir, sonra `tools/package_cc1352r_image.py`
+ile baslik bilgisi eklenmis container dosyasina donusturulur.
+
+Container yapisi:
+
+```text
+[FwImageHeader][new-firmware payload]
+```
+
+Header icinde surum, hedef adres, imaj boyutu, imaj CRC32 ve header CRC bilgisi
+tutulur. Boylece staging alanindaki veri sadece rastgele byte dizisi degil,
+kontrol edilebilir bir firmware paketi olur.
+
+## 5. Ayni Anda Iki Tam Imaj Saklanabiliyor mu?
+
+Genel cevap: Hayir, CC1352R uzerinde iki adet maksimum boyutlu tam firmware
+imajini ayni anda saklamak mumkun degildir.
+
+Bu projedeki cevap:
+
+- Aktif imaj icin 192 KiB ayrildi.
+- Yeni imaj staging alani icin 136 KiB ayrildi.
+- Metadata, recovery ve CCFG icin toplam 24 KiB ayrildi.
+
+Bu nedenle ayni anda iki imaj saklama fikri ancak imaj boyutlari bu sinirlara
+uyuyorsa mumkundur. `new-firmware` imaji staging alanina sigmazsa paketleme
+script'i hata verir.
+
+## 6. Sadece Staging Alani Varsa Aktivasyon Nasil Yapilir?
+
+Sadece staging alani, yeni imajin saklanmasi icin yeterlidir; fakat yeni imajin
+otomatik olarak calistirilmasi icin yeterli degildir.
+
+Aktivasyon icin ayrica bir bootloader/BIM veya kopyalama mekanizmasi gerekir:
+
+1. Reset sonrasi boot kodu veya ozel bootloader calisir.
+2. Metadata alaninda yeni imaj var mi diye bakar.
+3. Staging alanindaki header, boyut ve CRC bilgilerini dogrular.
+4. Imaj gecerliyse aktif uygulama alanini uygun sekilde siler.
+5. Staging alanindaki yeni imaji active app alanina kopyalar veya uygun
+   boot stratejisi ile yeni imaja dallanir.
+6. Metadata durumunu gunceller.
+7. Cihazi yeni firmware ile baslatir.
+
+Bu projede `new-firmware.container.hex` staging alanina yazilir, ancak mevcut
+kod tek basina yeni imaji boot etmez. Bu davranis odev kapsaminda bilincli bir
+donanim uyarlama kararidir.
+
+## 7. Boot Zinciri Akis Diyagrami
+
+Asagidaki akista, paylasilan BIM secim diyagrami Turkcelestirilerek
+gosterilmistir:
+
+```mermaid
+flowchart TD
+  A((Baslat)) --> B[Cihaz boot eder]
+  B --> C{Imaj dogrulama alanindaki<br/>'0' bit sayisi tek mi?}
+
+  C -- Evet --> D[OAD imaj basligina gore<br/>imaj tipini ve flash sayfasini ayarla]
+  C -- Hayir --> E[Imaj tipini kullanici uygulamasi yap<br/>flash sayfasini 0 yap]
+
+  D --> F[Gecerli flash sayfasindan<br/>OAD Imaj ID alanini oku]
+  E --> F
+
+  F --> G{Imaj ID bulundu mu?}
+  G -- Evet --> H[Kalan imaj basligini oku]
+  G -- Hayir --> I{Flash sonuna ulasildi mi?}
+
+  H --> J{Imaj basligi<br/>uyumlu ve gecerli mi?}
+  J -- Evet --> K[Ek imaj dogrulama<br/>veya kopyalama yap]
+  J -- Hayir --> L[Flash sayfa numarasini artir]
+
+  K --> M{Imaj calismaya<br/>hazir mi?}
+  M -- Evet --> N[Imaja atla]
+  N --> O((Bitis))
+  M -- Hayir --> P[Imaj tipini degistir<br/>flash sayfasini sifirla]
+
+  I -- Hayir --> L
+  I -- Evet --> Q{Maksimum arama<br/>denemesi doldu mu?}
+  Q -- Evet --> R[Dusuk guc modu]
+  Q -- Hayir --> P
+
+  L --> F
+  P --> F
+```
+
+Tam firmware degisimi istenirse bu akisa staging imajini dogrulayan ve aktif
+alana tasiyan bir bootloader/BIM adimi eklenmelidir.
+
+## 8. Boot Surecinde ROM Bootloader ve CCFG'nin Rolu
+
+ROM bootloader:
+
+- Cihazin ROM'unda hazir bulunur.
+- UART veya SSI uzerinden flash imaji indirme/yukleme amaciyla kullanilir.
+- Gecerli flash imaji yoksa veya bootloader backdoor kosulu saglanirsa devreye
+  girebilir.
+- Uygulama kodundan dogrudan cagrilacak genel bir firmware switch mekanizmasi
+  degildir.
+
+CCFG:
+
+- Uygulama tarafindan derleme zamaninda ayarlanan musteri konfigurasyon alanidir.
+- Bootloader enable/backdoor ayarlarini tutar.
+- JTAG/TAP/DAP erisim izinlerini tutar.
+- Image-valid bilgisini tutar.
+- Flash koruma ve erase davranislarini etkiler.
+
+Bu nedenle CCFG yanlis silinirse veya bozulursa cihaz boot edemeyebilir, debug
+erisimi kisitlanabilir veya bootloader davranisi beklenenden farkli hale
+gelebilir.
+
+## 9. CCFG Alani Neden Kritiktir?
+
+CCFG, son flash sayfasinda yer alan kritik konfigurasyon bilgisidir. Bu projede
+son 8 KiB alan CCFG icin ayrilmistir:
+
+```text
+0x00056000 - 0x00057FFF
+```
+
+Bu alanin kritik olma nedenleri:
+
+- ROM boot kodunun flash imajini gecerli saymasinda rol oynar.
+- Bootloader'in acik/kapali olmasini etkiler.
+- Bootloader backdoor pin kosulunu belirleyebilir.
+- Chip erase ve bank erase davranislarini etkileyebilir.
+- Debug/JTAG erisim izinlerini etkileyebilir.
+- Flash sektor koruma bitleri bu alanla iliskilidir.
+
+Bu yuzden `new-firmware.container.hex` yuklenirken **mass erase/full chip erase
+yapilmamalidir**. Staging dosyasi yalnizca `0x00030000` adresinden baslayan
+alana programlanmalidir.
+
+## 10. Flash Erase/Write Islemleri Neden Dikkatli Planlanmali?
+
+Flash bellek RAM gibi byte byte serbestce yazilamaz.
+
+CC1352R icin onemli noktalar:
+
+- Flash 8 KiB sayfalar halinde silinir.
+- Silme islemi ilgili sayfadaki bitleri `1` durumuna getirir.
+- Programlama islemi bitleri genellikle `1 -> 0` yonunde degistirir.
+- Ayni flash satirina erase olmadan sinirli sayida yazma yapilabilir.
+- Flash programlama/erase sirasinda flash'tan kod calistirmak tehlikelidir;
+  gerekirse yazma rutini SRAM'den calistirilmelidir.
+- VIMS cache/line buffer durumu flash guncelleme sirasinda dikkate alinmalidir.
+
+Bu nedenle aktif `old-firmware` calisirken aktif uygulama alanini silmek yanlis
+bir stratejidir. Yeni imaj once staging alanina yazilmali, sonra guvenilir bir
+bootloader tarafindan dogrulanip aktiflestirilmelidir.
+
+## 11. RAM Kisitlari ve Tampon Boyutlandirma
+
+CC1352R 80 KiB SRAM'e sahiptir. Bu RAM ayni anda isletim sistemi, stack, heap,
+ag tamponlari ve uygulama degiskenleri tarafindan kullanilir.
+
+Bu nedenle yeni firmware imajinin tamamini RAM'e almak dogru degildir. Daha
+guvenli strateji:
+
+- Imaj kucuk bloklar halinde islenir.
+- Blok boyutu flash row/page sinirlari ve ag paketi boyutlari dikkate alinarak
+  secilir.
+- Ornek tampon boyutlari: 256 B, 512 B veya 1024 B.
+- Tumuyle RAM'de tutmak yerine staging flash alanina parcali yazilir.
+- En sonda tum imaj CRC32 ile dogrulanir.
+
+Bu projede donanim gosterimi icin yeni imaj UniFlash ile staging alanina
+onceden yazilir. OTA aktarim yapilmadigi icin RAM tamponu tasarimi kodda tam
+aktarim mekanizmasi olarak kullanilmamistir; ancak gercek OTA uygulamasinda
+zorunlu hale gelir.
+
+## 12. Tam Firmware Degisimi Neden Bootloader Gerektirir?
+
+Calisan uygulama kendi bulundugu flash alanini silip yeniden yazmaya calisirsa
+su riskler ortaya cikar:
+
+- CPU silinen veya yazilan flash bolgesinden kod okumaya calisabilir.
+- Kesme vektorleri ve reset handler bozulabilir.
+- Guc kesilirse cihaz yarim yazilmis imajla kalabilir.
+- CCFG veya koruma alanlari yanlislikla silinebilir.
+- Yeni imajin CRC/dogrulama sonucu boot oncesi garanti edilemez.
+
+Bu nedenle tam firmware degisiminde bootloader/BIM gerekir. Bootloader,
+uygulamadan bagimsiz ve kucuk bir guvenilir kod parcasi olarak:
+
+- staging imajini dogrular,
+- aktif uygulama alanini kontrollu siler,
+- yeni imaji kopyalar veya secilecek imaji belirler,
+- basarisizlikta eski imaja veya recovery stratejisine donebilir.
+
+Bu projedeki `old-firmware` ve `new-firmware` ayrimi, bu gereksinimi gostermek
+icin tasarlanmistir.
+
+## 13. Bu Projedeki Firmware Rolleri
+
+### old-firmware
+
+`old-firmware.c` aktif uygulamadir. Baslangicta:
+
+- eski firmware surumunu loglar,
+- active app, staging, metadata ve CCFG adreslerini loglar,
+- staging alaninda `FwImageHeader` var mi diye bakar,
+- header CRC ve payload CRC kontrolu yapar,
+- gecerli imaj varsa bunun BIM tarafindan aktiflenebilir oldugunu loglar,
+- yesil LED'i yakar,
+- her saniye terminale saniye sayaci ile log basar.
+
+### new-firmware
+
+`new-firmware.c` yeni firmware imajidir. Bu dosya dogrudan aktif uygulama
+olarak flash'lanmaz. Derlendikten sonra binary hale getirilir ve staging
+container dosyasina donusturulur.
+
+## 14. Derleme
+
+Bu klasor Contiki-NG agaci altinda olmalidir. Onerilen konum:
+
+```sh
+contiki-ng/examples/bil304-hw3
+```
+
+`Makefile` icindeki `CONTIKI` yolu bu konuma gore ayarlanir:
 
 ```makefile
 CONTIKI ?= ../..
 ```
 
-## Firmware Roles
-
-It builds two separate firmware images:
-
-- **old-firmware**: The primary firmware that will be flashed to the CC1352R device and will run after reset.
-- **new-firmware**: The newer firmware image that will be analyzed and stored as data in the staging area.
-
-## Build For CC1352R
-
-First, list supported boards to ensure the correct name:
+Derleme:
 
 ```sh
-make TARGET=simplelink boards
-```
-
-Build both images for the CC1352R1 SensorTag:
-
-```sh
-make clean
 make TARGET=simplelink BOARD=sensortag/cc1352r1 old-firmware new-firmware
 ```
 
-## Build For Z1/Cooja
+Eger proje Contiki-NG disinda duruyorsa `CONTIKI` degiskeni dogrudan gercek
+Contiki-NG yolunu gostermelidir:
 
-For simulations using the Z1 platform:
-
-```sh
-make TARGET=z1 old-firmware new-firmware
+```makefile
+CONTIKI = C:/path/to/contiki-ng
 ```
 
-## Package New Firmware For Staging
+## 15. UniFlash ile Yukleme Sirasi
 
-The hardware adaptation code expects the new firmware storage area to start with a `FwImageHeader`, followed by the new firmware payload. After building `new-firmware`, create the container:
-
-```sh
-python3 tools/package_cc1352r_image.py new-firmware --version 0x00020000
-```
-
-This produces:
-
-- `new-firmware.container.bin`
-- `new-firmware.container.hex`
-
-## Flashing Strategy
-
-### Flashing To CC1352R
-
-The device must first be programmed with the old firmware image. Create the HEX file from the build output:
+### 1. old-firmware aktif imajini hazirla
 
 ```sh
 arm-none-eabi-objcopy -O ihex \
@@ -74,56 +347,76 @@ arm-none-eabi-objcopy -O ihex \
   build/simplelink/sensortag/cc1352r1/old-firmware.hex
 ```
 
-Load `old-firmware.hex` as the active application using UniFlash.
+UniFlash ile `old-firmware.hex` dosyasini normal aktif uygulama olarak cihaza
+yukle.
 
-### Loading Staged Firmware
-
-The new firmware must **not** be loaded as the active application image. It must be loaded into the staging/data area, starting at `0x00030000`, using the generated `new-firmware.container.hex`.
-
-> [!IMPORTANT]
-> When loading `new-firmware.container.hex`, do not perform a full chip erase. It must be programmed only into the staging area. Otherwise, the active old firmware or CCFG area may be erased.
-
-## ELF Analysis
-
-### For CC1352R/Arm firmware:
+### 2. new-firmware binary dosyasini uret
 
 ```sh
-cd build/simplelink/sensortag/cc1352r1
-
-file new-firmware.simplelink
-arm-none-eabi-readelf -h new-firmware.simplelink
-arm-none-eabi-readelf -S new-firmware.simplelink
-arm-none-eabi-readelf -l new-firmware.simplelink
-arm-none-eabi-readelf -s new-firmware.simplelink
-arm-none-eabi-objdump -h new-firmware.simplelink
-arm-none-eabi-objdump -d new-firmware.simplelink
-arm-none-eabi-nm -n new-firmware.simplelink
-arm-none-eabi-size new-firmware.simplelink
-arm-none-eabi-strings new-firmware.simplelink
+arm-none-eabi-objcopy -O binary \
+  build/simplelink/sensortag/cc1352r1/new-firmware.simplelink \
+  build/simplelink/sensortag/cc1352r1/new-firmware.bin
 ```
 
-### For Z1/MSP430 firmware:
+### 3. new-firmware staging container dosyasini uret
+
+Windows'ta:
 
 ```sh
-file new-firmware.z1
-msp430-readelf -h new-firmware.z1
-msp430-readelf -S new-firmware.z1
-msp430-readelf -l new-firmware.z1
-msp430-readelf -s new-firmware.z1
-msp430-objdump -h new-firmware.z1
-msp430-objdump -d new-firmware.z1
-msp430-nm -n new-firmware.z1
-msp430-size new-firmware.z1
-msp430-strings new-firmware.z1
+python tools/package_cc1352r_image.py \
+  build/simplelink/sensortag/cc1352r1/new-firmware.bin \
+  --version 0x00020000 \
+  --out-bin build/simplelink/sensortag/cc1352r1/new-firmware.container.bin \
+  --out-hex build/simplelink/sensortag/cc1352r1/new-firmware.container.hex
 ```
 
-In your report, explain the ELF class, target architecture, entry address, section meanings, code/data sizes, and important symbols.
+Linux/macOS ortaminda `python3` kullanilabilir.
 
-## Important Safety Notes
+### 4. staging alanini programla
 
-- **Do not flash `new-firmware.hex`** as the active application image.
-- The active image is **`old-firmware.hex`**.
-- The new firmware must be stored as data in the staging area (`0x00030000`).
-- **Do not mass erase** the device when programming the staging HEX file.
-- The CCFG sector must not be erased or overwritten.
-- The staged new firmware will not boot automatically without BIM/bootloader support.
+UniFlash ile `new-firmware.container.hex` dosyasini yukle.
+
+Kritik notlar:
+
+- Bu dosya aktif uygulama olarak yuklenmez.
+- Baslangic adresi container HEX icinde `0x00030000` olarak bulunur.
+- Full chip erase / mass erase yapilmaz.
+- CCFG bolgesi korunur.
+
+## 16. Odevin Pesinden Gidilecek Sorularina Kisa Cevaplar
+
+**Uygulamanin calisan ana imaji nereye yerlesecek?**
+
+`0x00000000 - 0x0002FFFF` araligindaki active app alanina yerlesir.
+
+**Diske kaydedilecek yeni imaj hangi alana yazilacak?**
+
+`0x00030000 - 0x00051FFF` araligindaki staging alanina yazilir.
+
+**Ayni anda iki tam imaj saklanabiliyor mu?**
+
+Maksimum boyutlu iki tam imaj saklanamaz. Bu projede aktif imaj 192 KiB, staged
+imaj ise en fazla yaklasik 136 KiB olacak sekilde sinirlandirilmistir.
+
+**Sadece staging alani varsa aktivasyon nasil yapilacak?**
+
+Staging tek basina aktivasyon yapmaz. Header/CRC dogrulamasi yapan ve yeni
+imaji aktif alana tasiyan bootloader/BIM gerekir.
+
+**Flash sektor silme ve yazma islemleri mevcut calisan imaji nasil etkileyebilir?**
+
+Aktif imajin bulundugu sayfa silinirse calisan kod, vektor tablosu veya sabit
+veriler bozulur. Bu nedenle yazma/silme islemleri staging gibi ayrilmis
+alanlara yapilmali ve aktif imaj ancak bootloader kontrolunde degistirilmelidir.
+
+## 17. Mevcut Sinirlar
+
+Bu proje yeni firmware'i staging alanina koyma stratejisini gosterir. Tek basina
+sunlari yapmaz:
+
+- staging imajini otomatik boot etmez,
+- aktif firmware'i staging imaji ile degistirmez,
+- guc kesintisine dayanikli A/B boot sistemi uygulamaz.
+
+Bu eksikler, tam firmware degisimi icin neden bootloader/BIM gerektigini
+gosteren odev cevabinin bir parcasidir.

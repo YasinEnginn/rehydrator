@@ -3,7 +3,7 @@
 #include "sys/log.h"
 #include "dev/leds.h"
 
-#include "hw3_layout.h"
+#include "hw3_image.h"
 
 #define LOG_MODULE "new-fw"
 #define LOG_LEVEL LOG_LEVEL_INFO
@@ -20,8 +20,9 @@ PROCESS_THREAD(new_firmware_process, ev, data)
 
   LOG_INFO("new firmware image running, version=0x%08lx\n",
            (unsigned long)HW3_NEW_FW_VERSION);
-  LOG_INFO("this image is built separately and stored as data at 0x%08lx\n",
-           (unsigned long)HW3_NEW_IMAGE_BASE);
+  LOG_INFO("packaged image is staged at 0x%08lx and targets 0x%08lx\n",
+           (unsigned long)HW3_NEW_IMAGE_BASE,
+           (unsigned long)HW3_ACTIVE_APP_BASE);
 
   etimer_set(&timer, CLOCK_SECOND * 2);
 
