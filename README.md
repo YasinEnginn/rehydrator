@@ -135,10 +135,14 @@ Aktivasyon icin ayrica bir bootloader/BIM veya kopyalama mekanizmasi gerekir:
 2. Metadata alaninda yeni imaj var mi diye bakar.
 3. Staging alanindaki header, boyut ve CRC bilgilerini dogrular.
 4. Imaj gecerliyse aktif uygulama alanini uygun sekilde siler.
-5. Staging alanindaki yeni imaji active app alanina kopyalar veya uygun
-   boot stratejisi ile yeni imaja dallanir.
+5. Staging alanindaki yeni imaji active app alanina kopyalar.
 6. Metadata durumunu gunceller.
-7. Cihazi yeni firmware ile baslatir.
+7. Reset atarak veya active app reset vektorune gecerek cihazi yeni firmware
+   ile baslatir.
+
+Bu proje icin `new-firmware` execute-in-place staging imaji degildir.
+`new-firmware` normal Cortex-M uygulamasi gibi `0x00000000` adresine
+linklenir; bu nedenle `0x00030000` staging adresinden dogrudan calistirilmaz.
 
 Bu projede `new-firmware.container.hex` staging alanina yazilir, ancak mevcut
 kod tek basina yeni imaji boot etmez. Bu davranis odev kapsaminda bilincli bir
@@ -169,7 +173,7 @@ flowchart TD
   J -- Hayir --> L[Flash sayfa numarasini artir]
 
   K --> M{Imaj calismaya<br/>hazir mi?}
-  M -- Evet --> N[Imaja atla]
+  M -- Evet --> N[Active app imajini baslat]
   N --> O((Bitis))
   M -- Hayir --> P[Imaj tipini degistir<br/>flash sayfasini sifirla]
 
@@ -230,6 +234,10 @@ Bu yuzden `new-firmware.container.hex` yuklenirken **mass erase/full chip erase
 yapilmamalidir**. Staging dosyasi yalnizca `0x00030000` adresinden baslayan
 alana programlanmalidir.
 
+ELF analizinde `.ccfg` section'i flash'in son sayfasinda, `0x00057fa8`
+civarinda gorunur. Bu section update payload'una dahil edilmemeli ve active
+app kopyalama islemi sirasinda uzerine yazilmamalidir.
+
 ## 10. Flash Erase/Write Islemleri Neden Dikkatli Planlanmali?
 
 Flash bellek RAM gibi byte byte serbestce yazilamaz.
@@ -284,7 +292,7 @@ uygulamadan bagimsiz ve kucuk bir guvenilir kod parcasi olarak:
 
 - staging imajini dogrular,
 - aktif uygulama alanini kontrollu siler,
-- yeni imaji kopyalar veya secilecek imaji belirler,
+- yeni imaji staging alanindan active app alanina kopyalar,
 - basarisizlikta eski imaja veya recovery stratejisine donebilir.
 
 Bu projedeki `old-firmware` ve `new-firmware` ayrimi, bu gereksinimi gostermek
@@ -354,9 +362,25 @@ yukle.
 
 ```sh
 arm-none-eabi-objcopy -O binary \
+  --only-section=.resetVecs \
+  --only-section=.text \
+  --only-section=.rodata \
+  --only-section=.data \
+  --only-section=vtable_ram \
+  --only-section=.ARM.exidx \
   build/simplelink/sensortag/cc1352r1/new-firmware.simplelink \
   build/simplelink/sensortag/cc1352r1/new-firmware.bin
 ```
+
+Bu komut yalnizca uygulamanin flash'ta tasinmasi gereken load section'larini
+alir. `.data` ve `vtable_ram` RAM'de calisan section'lar olsa da baslangic
+icerikleri flash'taki load image icinde tutuldugu icin payload'a dahil edilir.
+`.ccfg`, debug, symbol ve comment section'lari staging payload'una konmaz.
+
+Duz `objcopy -O binary` kullanilirsa `.ccfg` section'i yuzunden raw binary
+flash sonuna kadar uzayabilir. Paketleme script'i aktif uygulama sinirinin
+disindaki bytelari paketlemez; yine de yukaridaki section filtreli komut daha
+acik ve denetlenebilir bir cikti verir.
 
 ### 3. new-firmware staging container dosyasini uret
 
@@ -380,6 +404,9 @@ Kritik notlar:
 
 - Bu dosya aktif uygulama olarak yuklenmez.
 - Baslangic adresi container HEX icinde `0x00030000` olarak bulunur.
+- Header icindeki hedef adres `0x00000000` olur.
+- BIM/recovery staging adresine jump etmez; payload'u active app alanina
+  kopyalayip resetler veya active reset vektorune gecer.
 - Full chip erase / mass erase yapilmaz.
 - CCFG bolgesi korunur.
 

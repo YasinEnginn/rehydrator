@@ -2,6 +2,7 @@
 import argparse
 import pathlib
 import struct
+import sys
 import zlib
 
 FW_IMAGE_MAGIC = 0x46573352
@@ -12,6 +13,7 @@ FW_APP_SIZE = 0x00030000
 FW_NEW_IMAGE_SIZE = 0x00022000
 
 HEADER = struct.Struct("<IHHIIIII4II")
+FW_IMAGE_MAX_PAYLOAD_SIZE = FW_NEW_IMAGE_SIZE - HEADER.size
 
 
 def crc32(data):
@@ -55,6 +57,57 @@ def trim_payload(data):
     return data[:end]
 
 
+def warn(message):
+    print(f"warning: {message}", file=sys.stderr)
+
+
+def load_payload(path, source_limit):
+    raw = path.read_bytes()
+    if len(raw) > source_limit:
+        warn(
+            f"input is {len(raw)} bytes; ignoring bytes after 0x{source_limit:X} "
+            "so data outside the active application area, including CCFG, is not packaged"
+        )
+    return raw[:source_limit]
+
+
+def validate_args(source_limit, max_size, target):
+    if source_limit > FW_APP_SIZE:
+        raise SystemExit(
+            f"source-limit 0x{source_limit:X} crosses the active app boundary "
+            f"0x{FW_APP_SIZE:X}; refusing to risk packaging reserved flash/CCFG data"
+        )
+
+    if max_size > FW_IMAGE_MAX_PAYLOAD_SIZE:
+        raise SystemExit(
+            f"max-size {max_size} exceeds staging payload capacity "
+            f"{FW_IMAGE_MAX_PAYLOAD_SIZE}"
+        )
+
+    if target != FW_APP_BASE:
+        raise SystemExit(
+            f"target must be 0x{FW_APP_BASE:08X}; this image is copied to the "
+            "active app region before execution, not executed from staging"
+        )
+
+
+def validate_container(base, container_size):
+    staging_end = FW_NEW_IMAGE_BASE + FW_NEW_IMAGE_SIZE
+    container_end = base + container_size
+
+    if base < FW_NEW_IMAGE_BASE or container_end > staging_end:
+        raise SystemExit(
+            f"container range 0x{base:08X}-0x{container_end - 1:08X} is outside "
+            f"staging range 0x{FW_NEW_IMAGE_BASE:08X}-0x{staging_end - 1:08X}"
+        )
+
+    if base != FW_NEW_IMAGE_BASE:
+        warn(
+            f"output base 0x{base:08X} differs from HW3_NEW_IMAGE_BASE "
+            f"0x{FW_NEW_IMAGE_BASE:08X}; old-firmware will only check the layout base"
+        )
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Wrap a CC1352R firmware binary with the homework image header."
@@ -65,18 +118,23 @@ def main():
     parser.add_argument("--base", default="0x00030000", help="flash address for output HEX")
     parser.add_argument("--source-limit", default="0x00030000",
                         help="read only this many bytes from the raw payload")
-    parser.add_argument("--max-size", default="0x00021FD0",
-                        help="maximum payload bytes after trimming and padding")
+    parser.add_argument("--max-size", default=f"0x{FW_IMAGE_MAX_PAYLOAD_SIZE:08X}",
+                        help="maximum payload bytes after optional trimming and padding")
+    parser.add_argument("--trim-padding", action="store_true",
+                        help="trim trailing 0x00/0xFF padding from a sparse raw dump")
     parser.add_argument("--no-trim", action="store_true",
-                        help="do not trim trailing 0x00/0xFF padding")
+                        help=argparse.SUPPRESS)
     parser.add_argument("--out-bin", type=pathlib.Path, help="container binary output")
     parser.add_argument("--out-hex", type=pathlib.Path, help="addressed Intel HEX output")
     args = parser.parse_args()
 
     source_limit = parse_u32(args.source_limit)
     max_size = parse_u32(args.max_size)
-    payload = args.payload.read_bytes()[:source_limit]
-    if not args.no_trim:
+    target = parse_u32(args.target)
+    validate_args(source_limit, max_size, target)
+
+    payload = load_payload(args.payload, source_limit)
+    if args.trim_padding:
         payload = trim_payload(payload)
 
     padding = (-len(payload)) % 4
@@ -90,7 +148,6 @@ def main():
         )
 
     version = parse_u32(args.version)
-    target = parse_u32(args.target)
     base = parse_u32(args.base)
 
     image_crc = crc32(payload)
@@ -111,6 +168,8 @@ def main():
     struct.pack_into("<I", header, HEADER.size - 4, header_crc)
 
     container = bytes(header) + payload
+    validate_container(base, len(container))
+
     out_bin = args.out_bin or args.payload.with_suffix(".container.bin")
     out_hex = args.out_hex or args.payload.with_suffix(".container.hex")
 
