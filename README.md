@@ -50,6 +50,7 @@ BIM, flash'taki TI OAD image header'larini okur ve gecerli imajin
 | `old-firmware.c` | Persistent/fallback uygulama. Calisinca yesil LED'i yakar ve OAD yerlesimini loglar. |
 | `new-firmware.c` | User/staging uygulama. Calisinca kirmizi LED'i 2 saniyede bir toggle eder. |
 | `oad_layout.h` | Flash slotlari, OAD header boyutu, entry adresleri ve firmware versiyonlari. |
+| `oad_image_header.h` | Docker/Contiki build icin gereken TI OAD header sabitleri ve struct tanimlari. |
 | `oad_hdr_old.c` | Persistent imaj icin TI OAD image header. |
 | `oad_hdr.c` | User imaj icin TI OAD image header. |
 | `old-firmware.ld` | Persistent imaji `0x00000000` slotuna linkler. |
@@ -125,10 +126,10 @@ prgEntry  = 0x00030100
 softVer   = 0x00020000
 ```
 
-Header yapilari SDK'deki resmi dosyadan gelir:
+Header yapilari repo icindeki TI OAD uyumlu dosyadan gelir:
 
 ```c
-#include <ti/common/cc26xx/oad/oad_image_header.h>
+#include "oad_image_header.h"
 ```
 
 ## Boot Akisi

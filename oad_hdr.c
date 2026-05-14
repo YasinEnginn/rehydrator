@@ -1,7 +1,6 @@
 #include <stdint.h>
 
-#include <ti/common/cc26xx/oad/oad_image_header.h>
-
+#include "oad_image_header.h"
 #include "oad_layout.h"
 
 const imgHdr_t _imgHdr __attribute__((section(".image_header"), used)) = {
