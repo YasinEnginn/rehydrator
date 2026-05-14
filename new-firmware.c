@@ -20,9 +20,9 @@ PROCESS_THREAD(new_firmware_process, ev, data)
 
   LOG_INFO("OAD user firmware running, version=0x%08lx\n",
            (unsigned long)OAD_USER_FW_VERSION);
-  LOG_INFO("BIM jumped to OAD entry 0x%08lx in staging slot 0x%08lx\n",
-           (unsigned long)OAD_STAGING_ENTRY,
-           (unsigned long)OAD_STAGING_IMAGE_BASE);
+  LOG_INFO("BIM jumped to user image entry 0x%08lx in slot 0x%08lx\n",
+           (unsigned long)OAD_USER_ENTRY,
+           (unsigned long)OAD_USER_IMAGE_BASE);
 
   etimer_set(&timer, CLOCK_SECOND * 2);
 

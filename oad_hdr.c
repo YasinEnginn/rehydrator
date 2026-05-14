@@ -16,7 +16,7 @@ const imgHdr_t _imgHdr __attribute__((section(".image_header"), used)) = {
         .imgNo      = 0x0,
         .imgVld     = INVALID_ADDR,
         .len        = INVALID_LEN,
-        .prgEntry   = OAD_STAGING_ENTRY,
+        .prgEntry   = OAD_USER_ENTRY,
         .softVer    = {0x00, 0x00, 0x02, 0x00},
         .imgEndAddr = INVALID_ADDR,
         .hdrLen     = OAD_IMG_FULL_HDR_LEN,
@@ -27,6 +27,6 @@ const imgHdr_t _imgHdr __attribute__((section(".image_header"), used)) = {
         .wirelessTech = OAD_WIRELESS_TECH_PROPRF,
         .rfu          = DEFAULT_STATE,
         .imgSegLen    = INVALID_LEN,
-        .startAddr    = OAD_STAGING_IMAGE_BASE,
+        .startAddr    = OAD_USER_IMAGE_BASE,
     }
 };

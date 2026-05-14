@@ -16,14 +16,14 @@ AUTOSTART_PROCESSES(&old_firmware_process);
 static void
 log_oad_layout(void)
 {
-  LOG_INFO("active/persistent OAD slot: 0x%08lx-0x%08lx entry=0x%08lx\n",
-           TO_ULONG(OAD_ACTIVE_IMAGE_BASE),
-           TO_ULONG(RANGE_END(OAD_ACTIVE_IMAGE_BASE, OAD_ACTIVE_IMAGE_SIZE)),
-           TO_ULONG(OAD_ACTIVE_ENTRY));
   LOG_INFO("user OAD slot: 0x%08lx-0x%08lx entry=0x%08lx\n",
-           TO_ULONG(OAD_STAGING_IMAGE_BASE),
-           TO_ULONG(RANGE_END(OAD_STAGING_IMAGE_BASE, OAD_STAGING_IMAGE_SIZE)),
-           TO_ULONG(OAD_STAGING_ENTRY));
+           TO_ULONG(OAD_USER_IMAGE_BASE),
+           TO_ULONG(RANGE_END(OAD_USER_IMAGE_BASE, OAD_USER_IMAGE_SIZE)),
+           TO_ULONG(OAD_USER_ENTRY));
+  LOG_INFO("persistent fallback slot: 0x%08lx-0x%08lx entry=0x%08lx\n",
+           TO_ULONG(OAD_PERSISTENT_IMAGE_BASE),
+           TO_ULONG(RANGE_END(OAD_PERSISTENT_IMAGE_BASE, OAD_PERSISTENT_IMAGE_SIZE)),
+           TO_ULONG(OAD_PERSISTENT_ENTRY));
   LOG_INFO("metadata: 0x%08lx-0x%08lx, recovery: 0x%08lx-0x%08lx\n",
            TO_ULONG(OAD_UPDATE_METADATA_BASE),
            TO_ULONG(RANGE_END(OAD_UPDATE_METADATA_BASE, OAD_UPDATE_METADATA_SIZE)),
