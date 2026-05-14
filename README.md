@@ -1,65 +1,139 @@
-# BIL304 HW3 - CC1352R Donanim Uyarlama Notu
+<div align="center">
 
-Bu proje, donanim uzerinde OTA surecinin 3. is parcacigini gostermek icin
-hazirlanmis iki Contiki-NG firmware imajindan olusur:
+<img src="https://readme-typing-svg.demolab.com?font=Fira+Code&size=24&duration=3000&pause=800&color=00ADD8&center=true&vCenter=true&width=850&lines=CC1352R+Firmware+Yerle%C5%9Fimi;On-chip+BIM+ve+OAD+Analizi;Staging+%C4%B0maj+Stratejisi;ELF+%2B+HEX+%2B+Map+%C4%B0ncelemesi;BIL+304+HW3+3.+A%C5%9Fama" />
 
-- `old-firmware`: cihaza aktif uygulama olarak yuklenir.
-- `new-firmware`: aktif uygulama olarak degil, flash icindeki staging/data
-  alanina kaydedilecek yeni imaj olarak paketlenir.
+<h1>BIL304 HW3 - CC1352R On-chip BIM ve Staging Firmware Yerleşimi</h1>
 
-Bu README yalnizca odevin 3. kismi olan **CC1352R gercekleme ve donanim
-uyarlama** sorularina cevap verir. Teknik dayanak olarak `MCU.pdf`
-belgesindeki CC13x2/CC26x2 Technical Reference Manual kullanilmistir.
+<p>
+  <img src="https://img.shields.io/badge/Hedef-CC1352R-00ADD8" />
+  <img src="https://img.shields.io/badge/OS-Contiki--NG-success" />
+  <img src="https://img.shields.io/badge/Boot-BIM%2FOAD-orange" />
+  <img src="https://img.shields.io/badge/Analiz-ELF%20%2B%20HEX%20%2B%20MAP-8A2BE2" />
+  <img src="https://img.shields.io/badge/Kapsam-3.%20A%C5%9Fama-blue" />
+</p>
 
-## Kaynak Dokuman Ozeti
+<p>
+  <b>CC1352R üzerinde eski firmware, yeni staged firmware, BIM ve CCFG
+  yerleşimini açıklayan donanım uyarlama çalışması.</b>
+</p>
 
-`MCU.pdf` belgesinde kullanilan ana bolumler:
+<p>
+  Aktif imaj yerleşimi | Staging stratejisi | On-chip BIM analizi |
+  CCFG güvenliği | ELF/HEX/MAP incelemesi
+</p>
 
-| MCU.pdf sayfasi | Kullanilan bilgi |
-| ---: | --- |
-| 69-70 | SRAM, flash, ROM ve seri bootloader ozeti |
-| 310-311 | Program flash, SRAM ve CCFG bellek haritasi |
-| 638-646 | VIMS, flash/cache/GPRAM, flash yazma/silme kurallari |
-| 793-797 | ROM bootloader isleyisi ve paket protokolu |
-| 811-835 | CCFG, bootloader ayarlari, erase ayarlari ve image-valid bilgisi |
+<p>
+  <a href="#3-aşama-kapsam-kontrolü">Kapsam</a> |
+  <a href="#flash-yerleşimi">Flash Yerleşimi</a> |
+  <a href="#derleme">Derleme</a> |
+  <a href="#cc1352r-elf-ve-map-analizi">ELF Analizi</a> |
+  <a href="#ti-bim-ile-yükleme-akışı">BIM Yükleme</a> |
+  <a href="#kısa-cevaplar">Kısa Cevaplar</a>
+</p>
 
-Bu sayfalara gore CC1352R ailesinde:
+</div>
 
-- Ana cekirdek Arm Cortex-M4F mimarisindedir.
-- Program flash bellegi `0x00000000` adresinden baslar.
-- SRAM `0x20000000` adresinden baslar.
-- CCFG, cihaz konfigurasyon alanidir ve uygulama tarafindan ayarlanir.
-- ROM icinde seri bootloader bulunur.
-- Flash yazma/silme islemleri sayfa/sektor sinirlari dikkate alinarak
-  yapilmalidir.
+## İçindekiler
 
-Bu projede kullanilan yerlesim `hw3_layout.h` icinde tanimlidir.
+- [3. Aşama Kapsam Kontrolü](#3-aşama-kapsam-kontrolü)
+- [Projedeki Dosyalar](#projedeki-dosyalar)
+- [Flash Yerleşimi](#flash-yerleşimi)
+- [Mevcut Kodun Çalışma Mantığı](#mevcut-kodun-çalışma-mantığı)
+- [İki Farklı Header Modeli](#iki-farklı-header-modeli)
+- [Verilen BIM Dosyalarından Çıkan Sonuçlar](#verilen-bim-dosyalarından-çıkan-sonuçlar)
+- [Bu Projede Hangi İmaj Nereye Yerleştirilir?](#bu-projede-hangi-imaj-nereye-yerlestirilir)
+- [Derleme](#derleme)
+- [CC1352R ELF ve Map Analizi](#cc1352r-elf-ve-map-analizi)
+- [Paketleme Akışı](#paketleme-akışı)
+- [TI BIM ile Yükleme Akışı](#ti-bim-ile-yükleme-akışı)
+- [Boot Zinciri Akış Diyagramı](#boot-zinciri-akış-diyagramı)
+- [Önemli Tasarım Ayrımı](#önemli-tasarım-ayrımı)
+- [Kısa Cevaplar](#kısa-cevaplar)
 
-## 1. CC1352R Bellek Kapasiteleri
+## Genel Bakış
 
-`MCU.pdf` teknik referansina gore ilgili bellekler:
+Bu proje, CC1352R üzerinde tam firmware değişiminin neden dikkatli bir flash
+yerleşimi, imaj başlığı ve boot aşaması gerektirdiğini göstermek amacıyla
+hazırlanmıştır.
 
-| Bellek | Kapasite | Rol |
+Kapsam notu: Bu README ve bu depo yalnızca ödevin **3. aşaması olan CC1352R
+gerçekleme ve donanım uyarlama** bölümünü hedefler. 1. aşamadaki Cooja OTA
+aktarım geliştirmesi ve 2. aşamadaki MSP430/Z1 ELF araştırması bu çalışmanın
+kapsamı dışındadır.
+
+Kod tabanında iki ayrı kavram birlikte gösterilir:
+
+1. `old-firmware`: Cihazda aktif çalışan eski uygulama.
+2. `new-firmware`: Flash içindeki staging alanına yerleştirilecek yeni uygulama.
+3. `tools/package_cc1352r_image.py`: Yeni uygulamayı ödev için tanımlanan
+   `HW3` container başlığı ile paketleyen araç.
+4. Verilen `bim_onchip.*` dosyaları: TI'nin on-chip BIM/OAD boot akışını
+   gösteren gerçek Boot Image Manager örneği.
+
+En önemli nokta şudur: Bu depo tek başına güç kesintisine dayanıklı, tam
+otomatik bir OTA update sistemi değildir. Mevcut uygulama staging alanındaki
+imajı doğrular ve bootloader/BIM gereksinimini gösterir; aktif uygulama alanını
+silip yeni imajı kopyalama işlemini uygulama kodu yapmaz.
+
+## 3. Aşama Kapsam Kontrolü
+
+Bu README, yalnızca 3. aşama için istenen maddeleri aşağıdaki bölümlerde
+cevaplar:
+
+| Ödev beklentisi | README'deki karşılığı |
+| --- | --- |
+| Flash ve RAM kullanımını gösteren bellek yerleşim tablosu | `Flash Yerleşimi`, `bim_onchip.map`, `CC1352R ELF ve Map Analizi` bölümleri |
+| Boot zincirini gösteren kısa akış | `TI BIM/OAD Header Modeli`, `bim_onchip_main.c`, `TI BIM ile Yükleme Akışı` bölümleri |
+| CCFG alanının neden kritik olduğu | `BIM + CCFG son sektör`, `CCFG ve Son Sektör Neden Kritik?` bölümleri |
+| Diske ikinci firmware kaydı için yerleşim stratejisi | `new-firmware`, `Paketleme Akışı`, `Önemli Tasarım Ayrımı` bölümleri |
+| Tam firmware değişimi için bootloader gerekliliği | `Mevcut Kodun Çalışma Mantığı`, `Önemli Tasarım Ayrımı`, `Mevcut Sınırlar` bölümleri |
+| Peşinden gidilecek sorular | En sonda `Kısa Cevaplar` bölümünde doğrudan cevaplanır |
+
+## Projedeki Dosyalar
+
+| Dosya | Görev |
+| --- | --- |
+| `old-firmware.c` | Aktif çalışan eski firmware. Bellek yerleşimini loglar, staging alanında `HW3` container header'ı arar, header CRC ve payload CRC kontrolü yapar. |
+| `new-firmware.c` | Yeni firmware örneği. Çalıştırıldığında sürüm bilgisini loglar ve kırmızı LED'i iki saniyede bir toggle eder. |
+| `hw3_layout.h` | CC1352R flash bölümlerini ve firmware sürümlerini tanımlar. |
+| `hw3_image.h` | Ödev için kullanılan 48 byte'lık `HW3` staging container header formatını tanımlar. |
+| `oad_hdr_old.c` | `old-firmware` için TI OAD tarzında image header yerleştirir. Entry/start adresi `0x00000000` değeridir. |
+| `oad_hdr.c` | `new-firmware` için TI OAD tarzında image header yerleştirir. Mevcut kodda entry/start adresi `0x00030000` değeridir. |
+| `new-firmware.ld` | `new-firmware` imajını staging adresi olan `0x00030000` bölgesine linklemek için kullanılan linker script'tir. Contiki-NG derlemesinde komut satırından `LDSCRIPT=new-firmware.ld` olarak verilmelidir. |
+| `new-firmware.lds` | Daha geniş kapsamlı/generated linker script örneğidir. Mevcut `Makefile` tarafından kullanılmaz. |
+| `tools/package_cc1352r_image.py` | Raw firmware binary'sini `[HW3 header][payload]` biçiminde container'a dönüştürür, CRC32 hesaplar ve `.bin`/Intel HEX çıktıları üretir. |
+| `project-conf.h` | Contiki log seviyesini ayarlar. |
+| `.project`, `Debug/.clangd/compile_commands.json` | CCS/Eclipse/clangd yardımcı dosyalarıdır. Firmware davranışının ana parçası değildir. |
+
+## Flash Yerleşimi
+
+`hw3_layout.h` içindeki yerleşim, CC1352R'nin 352 KiB flash kapasitesini temel
+alır. Flash sayfa boyutu 8 KiB olarak kabul edilmiştir.
+
+### CC1352R Bellek Kapasiteleri
+
+3. aşama kapsamında hedeflenen CC1352R ailesinde temel bellekler aşağıdaki
+şekilde ele alınmıştır:
+
+| Bellek | Kapasite | Bu projedeki rol |
 | --- | ---: | --- |
-| Flash | 352 KiB | Program kodu, sabit veriler ve kalici veri |
-| SRAM | 80 KiB | Calisma zamani stack, heap ve tamponlar |
-| Cache / GPRAM | 8 KiB | Flash cache veya genel amacli RAM |
-| ROM | 255 KiB | Boot kodu, ROM fonksiyonlari ve seri bootloader |
+| Program flash | 352 KiB | Uygulama kodu, staging alanı, BIM ve CCFG |
+| SRAM | 80 KiB | Çalışma zamanı stack, heap, Contiki veri yapıları ve tamponlar |
+| Cache / GPRAM | 8 KiB | Flash cache veya genel amaçlı RAM olarak kullanılabilen alan |
+| ROM | 255 KiB | ROM kodu, driver/boot yardımcıları ve seri ROM bootloader |
 
-Flash bellek 8 KiB'lik sayfalar halinde organize edilir. Bu nedenle staging,
-metadata ve CCFG gibi alanlar 8 KiB sinirlarina hizalanmistir.
+Uygulama kodu kalıcı olarak program flash içinde tutulur. Reset sonrasında CPU,
+vektör tablosu ve reset handler üzerinden flash'taki uygulama veya BIM koduna
+geçer. SRAM yalnızca çalışma zamanı verileri içindir; yeni firmware imajının
+tamamını SRAM'e almak bu kapasite nedeniyle uygun değildir.
 
-## 2. Bu Projedeki Flash Yerlesimi
-
-`hw3_layout.h` dosyasindaki bolumleme:
-
-| Alan | Baslangic | Bitis | Boyut | Kullanim |
+| Alan | Başlangıç | Bitiş | Boyut | Kullanım |
 | --- | ---: | ---: | ---: | --- |
-| Active app | `0x00000000` | `0x0002FFFF` | 192 KiB | Calisan `old-firmware` |
-| New image staging | `0x00030000` | `0x00051FFF` | 136 KiB | Paketlenmis `new-firmware` |
-| Update metadata | `0x00052000` | `0x00053FFF` | 8 KiB | Imaj durumu, surum, CRC vb. |
-| Recovery/reserved | `0x00054000` | `0x00055FFF` | 8 KiB | Kurtarma veya yedek amacli alan |
-| CCFG flash sektoru | `0x00056000` | `0x00057FFF` | 8 KiB | Kritik cihaz konfigurasyonu |
+| Active app | `0x00000000` | `0x0002FFFF` | 192 KiB | Çalışan uygulama, yani `old-firmware` |
+| New image staging | `0x00030000` | `0x00051FFF` | 136 KiB | Yeni firmware veya staging container |
+| Update metadata | `0x00052000` | `0x00053FFF` | 8 KiB | Update durumu için ayrılmış alan; bu kodda aktif kullanılmaz |
+| Recovery/reserved | `0x00054000` | `0x00055FFF` | 8 KiB | Kurtarma/yedekleme için ayrılmış alan; bu kodda aktif kullanılmaz |
+| BIM + CCFG son sektör | `0x00056000` | `0x00057FFF` | 8 KiB | TI BIM kodu ve cihaz konfigürasyonu için korunması gereken son sektör |
 
 Toplam:
 
@@ -67,287 +141,587 @@ Toplam:
 192 KiB + 136 KiB + 8 KiB + 8 KiB + 8 KiB = 352 KiB
 ```
 
-Bu yerlesim cihazdaki 352 KiB flash kapasitesini tam olarak kapsar.
+`hw3_layout.h` son sektörü `HW3_CCFG_BASE = 0x00056000` olarak adlandırır.
+Bu isim, ödev açısından "son kritik sektör" anlamında değerlendirilmelidir.
+Verilen `bim_onchip.map` dosyasına göre gerçek CCFG yapısı tüm 8 KiB sektör
+değil, yalnızca son 88 byte'lık bölgedir:
 
-## 3. Uygulamanin Calisan Ana Imaji Nereye Yerlesir?
+```text
+FLASH_BIM   : 0x00056000 - 0x00057F53
+FLASH_CERT  : 0x00057F54 - 0x00057F9F
+FLASH_FNPTR : 0x00057FA0 - 0x00057FA3
+FLASH_CCFG  : 0x00057FA8 - 0x00057FFF
+```
 
-Ana uygulama `0x00000000` adresinden baslayan active app alanina yerlesir.
-Bu projede aktif calisan firmware `old-firmware` dosyasidir.
+Flash sayfa silme işlemi 8 KiB sektör seviyesinde yapıldığı için
+`0x00056000 - 0x00057FFF` aralığının tamamı korunmalıdır. Bu sektör yanlışlıkla
+silinirse hem BIM hem de CCFG bozulabilir.
 
-Neden `0x00000000`?
+## Mevcut Kodun Çalışma Mantığı
 
-- Arm Cortex-M tabanli sistemlerde reset sonrasi vektor tablosu flash basindan
-  okunur.
-- CCFG icindeki image-valid ayari, ROM boot kodunun hangi flash imajina kontrol
-  devredecegini belirler.
-- Standart flash imajlarinda vektor tablosu genellikle `0x00000000`
-  adresindedir.
+### 1. `old-firmware`
 
-Bu nedenle `old-firmware.hex`, UniFlash ile aktif uygulama olarak yazilacak
-dosyadir.
+`old-firmware.c`, cihazda normal aktif uygulama gibi çalışır.
 
-## 4. Diske Kaydedilecek Yeni Imaj Hangi Alana Yazilir?
+Başlangıçta:
 
-Yeni firmware aktif uygulama olarak yazilmaz. Bu projede yeni imaj staging
-alanina yazilir:
+- eski firmware sürümünü loglar: `HW3_OLD_FW_VERSION = 0x00010000`,
+- active app, staging, metadata ve son sektör adreslerini loglar,
+- staging alanında `struct hw3_image_header` olup olmadığını kontrol eder,
+- header alanlarını ve CRC değerlerini doğrular,
+- imaj geçerliyse bunun bir bootloader/BIM tarafından etkinleştirilebileceğini loglar,
+- yeşil LED'i yakar,
+- her saniye heartbeat logu basar.
+
+Staging kontrolü yalnızca `CONTIKI_TARGET_SIMPLELINK` için otomatik olarak
+açıktır. Diğer hedeflerde `HW3_CONF_ENABLE_STAGING_CHECK` varsayılan olarak
+kapalıdır.
+
+Kontrol edilen `HW3` header kuralları:
+
+| Alan | Beklenen değer |
+| --- | --- |
+| `magic` | `0x46573352` |
+| `header_size` | `48` |
+| `layout_version` | `1` |
+| `target` | `HW3_ACTIVE_APP_BASE`, yani `0x00000000` |
+| `image_size` | `0 < image_size <= HW3_IMAGE_MAX_PAYLOAD_SIZE` |
+| `header_crc` | Header'ın `header_crc` alanı sıfırlanarak hesaplanan CRC32 |
+| `image_crc` | Payload üzerinden hesaplanan CRC32 |
+
+Bu kontrol yalnızca doğrulama yapar. `old-firmware` aktif uygulama alanını
+silmez, staging'deki imajı kopyalamaz ve yeni firmware'e kendisi geçiş yapmaz.
+
+### 2. `new-firmware`
+
+`new-firmware.c`, yeni firmware örneğidir.
+
+Çalıştırıldığında:
+
+- `HW3_NEW_FW_VERSION = 0x00020000` değerini loglar,
+- staging ve active app adreslerini loglar,
+- kırmızı LED'i iki saniyede bir toggle eder.
+
+`new-firmware.ld` linker script'i, `new-firmware` imajını `0x00030000` adresine
+linklemek için hazırlanmıştır. Contiki-NG build sisteminde bu script'in
+gerçekten kullanılması için derleme komutunda `LDSCRIPT=new-firmware.ld`
+verilmelidir. Ayrıca `oad_hdr.c` içindeki TI OAD header alanları da `prgEntry`
+ve `startAddr` için `0x00030000` değerini kullanır.
+
+Bu nedenle mevcut kaynak kod, TI BIM açısından staging bölgesinden doğrudan
+geçiş yapılabilen bir imaj modeline yakındır. Buna karşılık
+`tools/package_cc1352r_image.py` aracı, `target = 0x00000000` kabul ederek
+"staging'den active app alanına kopyalanacak container" modelini anlatır.
+
+Bu iki model aşağıda ayrıca açıklanmıştır.
+
+## İki Farklı Header Modeli
+
+Bu projede bilinçli olarak iki farklı imaj başlığı yaklaşımı gösterilmiştir.
+Bu iki yaklaşım birbirine karıştırılmamalıdır.
+
+### Model A - Ödev `HW3` Container Header'ı
+
+Bu model `hw3_image.h`, `old-firmware.c` ve
+`tools/package_cc1352r_image.py` tarafından kullanılır.
+
+Container yapısı:
+
+```text
+0x00030000: [48 byte HW3 image header]
+0x00030030: [new-firmware payload]
+```
+
+Header içinde:
+
+- magic,
+- layout version,
+- firmware version,
+- payload boyutu,
+- payload CRC32,
+- hedef adres,
+- header CRC32
+
+bilgileri bulunur.
+
+Paketleme aracı varsayılan olarak:
+
+```text
+output HEX base : 0x00030000
+target address  : 0x00000000
+max payload     : HW3_NEW_IMAGE_SIZE - 48
+```
+
+kullanır.
+
+Bu modelde staging alanındaki imaj doğrudan çalıştırılmaz. Önce bir bootloader
+veya recovery kodu imajı doğrular, ardından payload'u active app alanına,
+`0x00000000` adresine kopyalar. Bu projede söz konusu kopyalama kodu
+uygulanmamıştır.
+
+### Model B - TI BIM/OAD Header'ı
+
+Bu model `oad_hdr_old.c`, `oad_hdr.c` ve verilen `bim_onchip_main.c` tarafından
+temsil edilir.
+
+TI BIM, flash sayfalarının başında TI OAD image header'ı arar. Header içinde:
+
+- `imgID`,
+- `bimVer`,
+- `metaVer`,
+- `imgType`,
+- `imgVld`,
+- `crcStat`,
+- `crc32`,
+- `len`,
+- `prgEntry`,
+- payload segment bilgileri
+
+bulunur.
+
+Verilen `bim_onchip_main.c` içindeki `Bim_findImage()` akışı şu kontrolleri
+yapar:
+
+1. İlgili flash sayfasından OAD image ID alanını okur.
+2. `imgIDCheck()` ile imaj kimliğini kontrol eder.
+3. İmaj tipi ve `imgVld` durumunu kontrol eder.
+4. `bimVer`, `metaVer` ve `crcStat` alanlarını denetler.
+5. Gerekirse CRC32 hesaplayıp `crcStat` alanını günceller.
+6. Security açıksa imza ve SHA256 kontrollerini yapar.
+7. Tüm kontroller geçerliyse `jumpToPrgEntry()` ile `prgEntry` adresine geçer.
+
+Bu modelde BIM, `HW3` container header'ını okumaz. Bu nedenle
+`tools/package_cc1352r_image.py` ile üretilen container dosyası TI BIM için
+doğrudan beklenen format değildir.
+
+## Verilen BIM Dosyalarından Çıkan Sonuçlar
+
+Bu README hazırlanırken aşağıdaki dosyalar da incelenmiştir:
+
+- `bim_onchip_main.c`
+- `bim_onchip.map`
+- `bim_onchip.hex`
+
+### `bim_onchip_main.c`
+
+Bu dosya, TI'nin on-chip OAD için kullandığı Boot Image Manager ana kodudur.
+Kodun temel akışı:
+
+```text
+main()
+  -> Flash sayfa boyutunu oku
+  -> Önce OAD_IMG_TYPE_APPSTACKLIB tipinde uygulama imajı ara
+  -> Bulunamazsa OAD_IMG_TYPE_PERSISTENT_APP tipinde persistent imaj ara
+  -> Geçerli imaj bulunursa Bim_findImage() içinden prgEntry adresine geç
+  -> Geçerli imaj yoksa LED hata durumuna veya low-power moda gir
+```
+
+`START_PAGE` CC13x2/CC26x2 ailesi için `0` olarak tanımlıdır. `APP_HDR_LOC`
+verilmemişse BIM önce flash başlangıcından imaj aramaya başlar. Persistent imaj
+için ise sonraki sayfaları tarar.
+
+Bu BIM kodu, active app alanını silip staging'den kopyalama yapan bir copy
+manager gibi davranmaz. Uygun OAD header'a sahip geçerli imajı bulur ve
+`prgEntry` adresine geçer.
+
+### `bim_onchip.map`
+
+Map dosyası, derlenmiş BIM'in gerçek flash yerleşimini gösterir:
+
+| Bölge | Origin | Length | Used |
+| --- | ---: | ---: | ---: |
+| `FLASH_BIM` | `0x00056000` | `0x00001F54` | `0x0000057C` |
+| `FLASH_CERT` | `0x00057F54` | `0x0000004C` | `0x00000000` |
+| `FLASH_FNPTR` | `0x00057FA0` | `0x00000004` | `0x00000000` |
+| `FLASH_CCFG` | `0x00057FA8` | `0x00000058` | `0x00000058` |
+| `SRAM` | `0x20000300` | `0x00013D00` | `0x00000100` |
+
+Önemli semboller:
+
+| Sembol | Adres | Anlam |
+| --- | ---: | --- |
+| `ResetISR` | `0x0005653D` | BIM reset handler girişi |
+| `Bim_findImage` | `0x00056258` | İmaj arama/doğrulama fonksiyonu |
+| `main` | `0x000564ED` | BIM ana akışı |
+| `jumpToPrgEntry` | `0x00056547` | Geçerli imaja geçiş fonksiyonu |
+| `OAD_IMG_ID` | `0x0005656C` | OAD imaj kimliği sabiti |
+
+Bu bilgi `hw3_layout.h` yerleşimiyle uyumludur: son 8 KiB sektör
+`0x00056000 - 0x00057FFF` aralığında ayrılmıştır.
+
+### `bim_onchip.hex`
+
+HEX dosyası Intel HEX formatındadır. İlk kayıt:
+
+```text
+:020000040005F5
+```
+
+extended linear address olarak `0x0005` üst adresini seçer. Hemen sonraki veri
+kaydı `0x6000` offset'indedir. Bu iki kayıt birlikte ilk program adresinin
+`0x00056000` olduğunu gösterir.
+
+Dosyanın son tarafında `0x00057FA8` civarında CCFG kayıtları vardır. Bu durum,
+map dosyasındaki `FLASH_CCFG = 0x00057FA8 - 0x00057FFF` sonucunu doğrular.
+CCFG kayıtları boot davranışını belirlediği için ROM boot kodunun BIM'e
+gidebilmesi bu bölgenin doğru programlanmasına bağlıdır.
+
+Sonuç olarak `bim_onchip.hex` yüklenirken son 8 KiB sektör programlanır. Bundan
+sonra `old-firmware.hex` veya `new-firmware.container.hex` yüklenirken full chip
+erase yapılmamalıdır; aksi halde BIM ve CCFG silinebilir.
+
+<a id="bu-projede-hangi-imaj-nereye-yerlestirilir"></a>
+
+## Bu Projede Hangi İmaj Nereye Yerleştirilir?
+
+### `old-firmware`
+
+Aktif uygulama alanına yerleştirilir:
+
+```text
+0x00000000 - 0x0002FFFF
+```
+
+Bu alan, reset sonrasında çalışan ana uygulama alanıdır. `old-firmware`
+içindeki OAD header da entry/start adresini `0x00000000` olarak tanımlar.
+
+### `new-firmware`
+
+Staging alanına yerleştirilir:
 
 ```text
 0x00030000 - 0x00051FFF
 ```
 
-Bu alan `HW3_NEW_IMAGE_BASE` ve `HW3_NEW_IMAGE_SIZE` ile tanimlidir.
-`new-firmware` once binary hale getirilir, sonra `tools/package_cc1352r_image.py`
-ile baslik bilgisi eklenmis container dosyasina donusturulur.
+Mevcut `new-firmware.ld` dosyası yeni firmware'i bu adrese linkler:
 
-Container yapisi:
-
-```text
-[FwImageHeader][new-firmware payload]
+```ld
+FLASH (RX) : ORIGIN = 0x00030000, LENGTH = 0x00022000
 ```
 
-Header icinde surum, hedef adres, imaj boyutu, imaj CRC32 ve header CRC bilgisi
-tutulur. Boylece staging alanindaki veri sadece rastgele byte dizisi degil,
-kontrol edilebilir bir firmware paketi olur.
+Mevcut `oad_hdr.c` de `prgEntry` ve `startAddr` değerlerini `0x00030000`
+olarak ayarlar. Bu ayar, TI BIM'in geçerli OAD header bulduktan sonra staging
+bölgesindeki imaja geçmesi senaryosu ile uyumludur.
 
-## 5. Ayni Anda Iki Tam Imaj Saklanabiliyor mu?
+Ancak `HW3` container modeli kullanılıyorsa header içindeki `target`
+`0x00000000` olur. Bu durumda staging payload'u doğrudan çalışmak yerine active
+app alanına kopyalanacak imaj olarak düşünülür.
 
-Genel cevap: Hayir, CC1352R uzerinde iki adet maksimum boyutlu tam firmware
-imajini ayni anda saklamak mumkun degildir.
+Bu iki yol otomatik olarak birbirine dönüşmez. Mevcut `new-firmware.ld` ve
+`oad_hdr.c` staging adresini kullandığı için gerçek copy-to-active aktivasyonu
+yazılacaksa `new-firmware` linker/header ayarları yeniden değerlendirilmelidir.
 
-Bu projedeki cevap:
+## Derleme
 
-- Aktif imaj icin 192 KiB ayrildi.
-- Yeni imaj staging alani icin 136 KiB ayrildi.
-- Metadata, recovery ve CCFG icin toplam 24 KiB ayrildi.
-
-Bu nedenle ayni anda iki imaj saklama fikri ancak imaj boyutlari bu sinirlara
-uyuyorsa mumkundur. `new-firmware` imaji staging alanina sigmazsa paketleme
-script'i hata verir.
-
-## 6. Sadece Staging Alani Varsa Aktivasyon Nasil Yapilir?
-
-Sadece staging alani, yeni imajin saklanmasi icin yeterlidir; fakat yeni imajin
-otomatik olarak calistirilmasi icin yeterli degildir.
-
-Aktivasyon icin ayrica bir bootloader/BIM veya kopyalama mekanizmasi gerekir:
-
-1. Reset sonrasi boot kodu veya ozel bootloader calisir.
-2. Metadata alaninda yeni imaj var mi diye bakar.
-3. Staging alanindaki header, boyut ve CRC bilgilerini dogrular.
-4. Imaj gecerliyse aktif uygulama alanini uygun sekilde siler.
-5. Staging alanindaki yeni imaji active app alanina kopyalar.
-6. Metadata durumunu gunceller.
-7. Reset atarak veya active app reset vektorune gecerek cihazi yeni firmware
-   ile baslatir.
-
-Bu proje icin `new-firmware` execute-in-place staging imaji degildir.
-`new-firmware` normal Cortex-M uygulamasi gibi `0x00000000` adresine
-linklenir; bu nedenle `0x00030000` staging adresinden dogrudan calistirilmaz.
-
-Bu projede `new-firmware.container.hex` staging alanina yazilir, ancak mevcut
-kod tek basina yeni imaji boot etmez. Bu davranis odev kapsaminda bilincli bir
-donanim uyarlama kararidir.
-
-## 7. Boot Zinciri Akis Diyagrami
-
-Asagidaki akista, paylasilan BIM secim diyagrami Turkcelestirilerek
-gosterilmistir:
-
-```mermaid
-flowchart TD
-  A((Baslat)) --> B[Cihaz boot eder]
-  B --> C{Imaj dogrulama alanindaki<br/>'0' bit sayisi tek mi?}
-
-  C -- Evet --> D[OAD imaj basligina gore<br/>imaj tipini ve flash sayfasini ayarla]
-  C -- Hayir --> E[Imaj tipini kullanici uygulamasi yap<br/>flash sayfasini 0 yap]
-
-  D --> F[Gecerli flash sayfasindan<br/>OAD Imaj ID alanini oku]
-  E --> F
-
-  F --> G{Imaj ID bulundu mu?}
-  G -- Evet --> H[Kalan imaj basligini oku]
-  G -- Hayir --> I{Flash sonuna ulasildi mi?}
-
-  H --> J{Imaj basligi<br/>uyumlu ve gecerli mi?}
-  J -- Evet --> K[Ek imaj dogrulama<br/>veya kopyalama yap]
-  J -- Hayir --> L[Flash sayfa numarasini artir]
-
-  K --> M{Imaj calismaya<br/>hazir mi?}
-  M -- Evet --> N[Active app imajini baslat]
-  N --> O((Bitis))
-  M -- Hayir --> P[Imaj tipini degistir<br/>flash sayfasini sifirla]
-
-  I -- Hayir --> L
-  I -- Evet --> Q{Maksimum arama<br/>denemesi doldu mu?}
-  Q -- Evet --> R[Dusuk guc modu]
-  Q -- Hayir --> P
-
-  L --> F
-  P --> F
-```
-
-Tam firmware degisimi istenirse bu akisa staging imajini dogrulayan ve aktif
-alana tasiyan bir bootloader/BIM adimi eklenmelidir.
-
-## 8. Boot Surecinde ROM Bootloader ve CCFG'nin Rolu
-
-ROM bootloader:
-
-- Cihazin ROM'unda hazir bulunur.
-- UART veya SSI uzerinden flash imaji indirme/yukleme amaciyla kullanilir.
-- Gecerli flash imaji yoksa veya bootloader backdoor kosulu saglanirsa devreye
-  girebilir.
-- Uygulama kodundan dogrudan cagrilacak genel bir firmware switch mekanizmasi
-  degildir.
-
-CCFG:
-
-- Uygulama tarafindan derleme zamaninda ayarlanan musteri konfigurasyon alanidir.
-- Bootloader enable/backdoor ayarlarini tutar.
-- JTAG/TAP/DAP erisim izinlerini tutar.
-- Image-valid bilgisini tutar.
-- Flash koruma ve erase davranislarini etkiler.
-
-Bu nedenle CCFG yanlis silinirse veya bozulursa cihaz boot edemeyebilir, debug
-erisimi kisitlanabilir veya bootloader davranisi beklenenden farkli hale
-gelebilir.
-
-## 9. CCFG Alani Neden Kritiktir?
-
-CCFG, son flash sayfasinda yer alan kritik konfigurasyon bilgisidir. Bu projede
-son 8 KiB alan CCFG icin ayrilmistir:
-
-```text
-0x00056000 - 0x00057FFF
-```
-
-Bu alanin kritik olma nedenleri:
-
-- ROM boot kodunun flash imajini gecerli saymasinda rol oynar.
-- Bootloader'in acik/kapali olmasini etkiler.
-- Bootloader backdoor pin kosulunu belirleyebilir.
-- Chip erase ve bank erase davranislarini etkileyebilir.
-- Debug/JTAG erisim izinlerini etkileyebilir.
-- Flash sektor koruma bitleri bu alanla iliskilidir.
-
-Bu yuzden `new-firmware.container.hex` yuklenirken **mass erase/full chip erase
-yapilmamalidir**. Staging dosyasi yalnizca `0x00030000` adresinden baslayan
-alana programlanmalidir.
-
-ELF analizinde `.ccfg` section'i flash'in son sayfasinda, `0x00057fa8`
-civarinda gorunur. Bu section update payload'una dahil edilmemeli ve active
-app kopyalama islemi sirasinda uzerine yazilmamalidir.
-
-## 10. Flash Erase/Write Islemleri Neden Dikkatli Planlanmali?
-
-Flash bellek RAM gibi byte byte serbestce yazilamaz.
-
-CC1352R icin onemli noktalar:
-
-- Flash 8 KiB sayfalar halinde silinir.
-- Silme islemi ilgili sayfadaki bitleri `1` durumuna getirir.
-- Programlama islemi bitleri genellikle `1 -> 0` yonunde degistirir.
-- Ayni flash satirina erase olmadan sinirli sayida yazma yapilabilir.
-- Flash programlama/erase sirasinda flash'tan kod calistirmak tehlikelidir;
-  gerekirse yazma rutini SRAM'den calistirilmelidir.
-- VIMS cache/line buffer durumu flash guncelleme sirasinda dikkate alinmalidir.
-
-Bu nedenle aktif `old-firmware` calisirken aktif uygulama alanini silmek yanlis
-bir stratejidir. Yeni imaj once staging alanina yazilmali, sonra guvenilir bir
-bootloader tarafindan dogrulanip aktiflestirilmelidir.
-
-## 11. RAM Kisitlari ve Tampon Boyutlandirma
-
-CC1352R 80 KiB SRAM'e sahiptir. Bu RAM ayni anda isletim sistemi, stack, heap,
-ag tamponlari ve uygulama degiskenleri tarafindan kullanilir.
-
-Bu nedenle yeni firmware imajinin tamamini RAM'e almak dogru degildir. Daha
-guvenli strateji:
-
-- Imaj kucuk bloklar halinde islenir.
-- Blok boyutu flash row/page sinirlari ve ag paketi boyutlari dikkate alinarak
-  secilir.
-- Ornek tampon boyutlari: 256 B, 512 B veya 1024 B.
-- Tumuyle RAM'de tutmak yerine staging flash alanina parcali yazilir.
-- En sonda tum imaj CRC32 ile dogrulanir.
-
-Bu projede donanim gosterimi icin yeni imaj UniFlash ile staging alanina
-onceden yazilir. OTA aktarim yapilmadigi icin RAM tamponu tasarimi kodda tam
-aktarim mekanizmasi olarak kullanilmamistir; ancak gercek OTA uygulamasinda
-zorunlu hale gelir.
-
-## 12. Tam Firmware Degisimi Neden Bootloader Gerektirir?
-
-Calisan uygulama kendi bulundugu flash alanini silip yeniden yazmaya calisirsa
-su riskler ortaya cikar:
-
-- CPU silinen veya yazilan flash bolgesinden kod okumaya calisabilir.
-- Kesme vektorleri ve reset handler bozulabilir.
-- Guc kesilirse cihaz yarim yazilmis imajla kalabilir.
-- CCFG veya koruma alanlari yanlislikla silinebilir.
-- Yeni imajin CRC/dogrulama sonucu boot oncesi garanti edilemez.
-
-Bu nedenle tam firmware degisiminde bootloader/BIM gerekir. Bootloader,
-uygulamadan bagimsiz ve kucuk bir guvenilir kod parcasi olarak:
-
-- staging imajini dogrular,
-- aktif uygulama alanini kontrollu siler,
-- yeni imaji staging alanindan active app alanina kopyalar,
-- basarisizlikta eski imaja veya recovery stratejisine donebilir.
-
-Bu projedeki `old-firmware` ve `new-firmware` ayrimi, bu gereksinimi gostermek
-icin tasarlanmistir.
-
-## 13. Bu Projedeki Firmware Rolleri
-
-### old-firmware
-
-`old-firmware.c` aktif uygulamadir. Baslangicta:
-
-- eski firmware surumunu loglar,
-- active app, staging, metadata ve CCFG adreslerini loglar,
-- staging alaninda `FwImageHeader` var mi diye bakar,
-- header CRC ve payload CRC kontrolu yapar,
-- gecerli imaj varsa bunun BIM tarafindan aktiflenebilir oldugunu loglar,
-- yesil LED'i yakar,
-- her saniye terminale saniye sayaci ile log basar.
-
-### new-firmware
-
-`new-firmware.c` yeni firmware imajidir. Bu dosya dogrudan aktif uygulama
-olarak flash'lanmaz. Derlendikten sonra binary hale getirilir ve staging
-container dosyasina donusturulur.
-
-## 14. Derleme
-
-Bu klasor Contiki-NG agaci altinda olmalidir. Onerilen konum:
+Bu proje, Contiki-NG ağacı altında çalışacak şekilde hazırlanmıştır. Beklenen
+konum örneği:
 
 ```sh
 contiki-ng/examples/bil304-hw3
 ```
 
-`Makefile` icindeki `CONTIKI` yolu bu konuma gore ayarlanir:
+`Makefile` içindeki varsayılan Contiki yolu:
 
 ```makefile
 CONTIKI ?= ../..
 ```
 
-Derleme:
+Bu depo Contiki-NG ağacının altında değilse `CONTIKI` değeri komut satırında
+verilmelidir. Aksi halde `make`, `$(CONTIKI)/Makefile.include` dosyasını
+bulamaz.
+
+Bu projede kullanılan Contiki-NG SimpleLink board adı
+`sensortag/cc1352r1` olmalıdır. Desteklenen board adlarını görmek için:
 
 ```sh
-make TARGET=simplelink BOARD=sensortag/cc1352r1 old-firmware new-firmware
+make TARGET=simplelink CONTIKI=C:/path/to/contiki-ng boards
 ```
 
-Eger proje Contiki-NG disinda duruyorsa `CONTIKI` degiskeni dogrudan gercek
-Contiki-NG yolunu gostermelidir:
+Contiki-NG dokümantasyonundaki çıktı yapısına göre firmware dosyaları
+`build/$(TARGET)/$(BOARD)` altında üretilir. Bu proje için varsayılan yol:
 
-```makefile
-CONTIKI = C:/path/to/contiki-ng
+```text
+build/simplelink/sensortag/cc1352r1
 ```
 
-## 15. UniFlash ile Yukleme Sirasi
+### 1. `old-firmware` derle
 
-### 1. old-firmware aktif imajini hazirla
+`old-firmware`, aktif uygulama alanına göre derlenir. Bunun için platformun
+varsayılan linker script'i kullanılmalıdır:
+
+```sh
+make TARGET=simplelink BOARD=sensortag/cc1352r1 CONTIKI=C:/path/to/contiki-ng old-firmware
+```
+
+Contiki-NG kendi SDK submodule'unu kullanmıyorsa, yerel SimpleLink SDK yolu
+`CORE_SDK` ile belirtilebilir:
+
+```sh
+make TARGET=simplelink BOARD=sensortag/cc1352r1 CONTIKI=C:/path/to/contiki-ng CORE_SDK=C:/ti/simplelink_cc13xx_cc26xx_sdk_8_32_00_07 old-firmware
+```
+
+### 2. `new-firmware` derle
+
+`new-firmware` staging adresine linklenecekse aynı komutta `old-firmware` ile
+birlikte derlenmemelidir. Bu imaj için `new-firmware.ld` açıkça verilmelidir:
+
+```sh
+make TARGET=simplelink BOARD=sensortag/cc1352r1 CONTIKI=C:/path/to/contiki-ng LDSCRIPT=new-firmware.ld new-firmware
+```
+
+Yerel SimpleLink SDK kullanılıyorsa:
+
+```sh
+make TARGET=simplelink BOARD=sensortag/cc1352r1 CONTIKI=C:/path/to/contiki-ng CORE_SDK=C:/ti/simplelink_cc13xx_cc26xx_sdk_8_32_00_07 LDSCRIPT=new-firmware.ld new-firmware
+```
+
+Not: Contiki-NG'nin standart build sistemi per-project `*_LDSCRIPT` değişkeni
+kullanmaz. Bu nedenle staging linker script'i komut satırında
+`LDSCRIPT=new-firmware.ld` olarak verilmelidir.
+
+Windows ortamında `C:/path/to/contiki-ng` yerine gerçek Contiki-NG klasörü
+yazılmalıdır. Proje doğrudan `contiki-ng/examples/bil304-hw3` altındaysa
+`CONTIKI=../..` yeterlidir ve komut daha kısa yazılabilir:
+
+```sh
+make TARGET=simplelink BOARD=sensortag/cc1352r1 old-firmware
+make TARGET=simplelink BOARD=sensortag/cc1352r1 LDSCRIPT=new-firmware.ld new-firmware
+```
+
+## CC1352R ELF ve Map Analizi
+
+Bu bölüm, yalnızca 3. aşamanın donanım uyarlama raporunu desteklemek amacıyla
+CC1352R/ARM tarafında üretilen ELF, HEX ve map çıktılarının kontrolünü açıklar.
+2. aşamada istenen MSP430/Z1 genel ELF araştırması bu README'nin kapsamı
+dışındadır.
+
+Buradaki amaç, derlenen imajların gerçekten beklenen flash bölgelerine
+yerleştiğini ve update payload'una girmemesi gereken section'ların ayıklandığını
+göstermektir.
+
+Aşağıdaki komutlarda derleme çıktısı klasörü:
+
+```text
+build/simplelink/sensortag/cc1352r1
+```
+
+olarak kabul edilmiştir.
+
+### 1. Analiz Araçlarını Seç
+
+GNU Arm toolchain varsa:
+
+```sh
+arm-none-eabi-readelf --version
+arm-none-eabi-objdump --version
+arm-none-eabi-nm --version
+arm-none-eabi-size --version
+```
+
+TI Arm Clang kuruluysa Windows PowerShell'de aşağıdaki araçlar kullanılabilir:
+
+```powershell
+$TI = "C:\ti\ti_cgt_arm_llvm_3.2.2.LTS\bin"
+& "$TI\tiarmreadelf.exe" --version
+& "$TI\tiarmobjdump.exe" --version
+& "$TI\tiarmnm.exe" --version
+& "$TI\tiarmsize.exe" --version
+```
+
+### 2. ELF Section Tablosunu İncele
+
+PowerShell:
+
+```powershell
+$BUILD_DIR = "build/simplelink/sensortag/cc1352r1"
+$OLD_ELF = "$BUILD_DIR/old-firmware.simplelink"
+$NEW_ELF = "$BUILD_DIR/new-firmware.simplelink"
+$TI = "C:\ti\ti_cgt_arm_llvm_3.2.2.LTS\bin"
+
+& "$TI\tiarmreadelf.exe" -S $OLD_ELF
+& "$TI\tiarmreadelf.exe" -S $NEW_ELF
+```
+
+GNU araçlarıyla aynı kontrol:
+
+```sh
+arm-none-eabi-readelf -S build/simplelink/sensortag/cc1352r1/old-firmware.simplelink
+arm-none-eabi-readelf -S build/simplelink/sensortag/cc1352r1/new-firmware.simplelink
+```
+
+Bu kontrolde beklenenler:
+
+- `old-firmware` aktif uygulama imajı olduğu için flash başlangıcı
+  `0x00000000` tarafında olmalıdır.
+- `new-firmware`, `LDSCRIPT=new-firmware.ld` ile derlendiyse `.image_header`
+  ve `.text` bölgeleri `0x00030000` civarından başlamalıdır.
+- `.ccfg` section'ı update payload'una dahil edilmemelidir. ELF içinde görünse
+  bile binary üretilirken `--only-section` listesine konmamalıdır.
+
+Yalnızca ilgili section'lar aşağıdaki şekilde filtrelenebilir:
+
+```powershell
+& "$TI\tiarmreadelf.exe" -S $NEW_ELF |
+  Select-String "\.image_header|\.text|\.data|\.ARM\.exidx|\.ccfg"
+```
+
+### 3. Program Header ve Load Adreslerini Kontrol Et
+
+`.data` gibi bazı section'lar çalışma zamanında SRAM adresine sahiptir; ancak
+başlangıç içerikleri flash'taki load image içinde tutulur. Bu nedenle ELF
+program header kontrolü önemlidir.
+
+```powershell
+& "$TI\tiarmreadelf.exe" -l $NEW_ELF
+```
+
+GNU:
+
+```sh
+arm-none-eabi-readelf -l build/simplelink/sensortag/cc1352r1/new-firmware.simplelink
+```
+
+Bu kontrolde `new-firmware` için load edilecek flash segmentlerinin staging
+aralığında kalması beklenir:
+
+```text
+0x00030000 - 0x00051FFF
+```
+
+### 4. Section Boyutlarını ve Adreslerini Özetle
+
+```powershell
+& "$TI\tiarmobjdump.exe" -h $OLD_ELF
+& "$TI\tiarmobjdump.exe" -h $NEW_ELF
+& "$TI\tiarmsize.exe" --format=sysv $OLD_ELF
+& "$TI\tiarmsize.exe" --format=sysv $NEW_ELF
+```
+
+GNU:
+
+```sh
+arm-none-eabi-objdump -h build/simplelink/sensortag/cc1352r1/old-firmware.simplelink
+arm-none-eabi-objdump -h build/simplelink/sensortag/cc1352r1/new-firmware.simplelink
+arm-none-eabi-size -A build/simplelink/sensortag/cc1352r1/old-firmware.simplelink
+arm-none-eabi-size -A build/simplelink/sensortag/cc1352r1/new-firmware.simplelink
+```
+
+Rapor için özellikle aşağıdaki değerler yazılabilir:
+
+- `.image_header` başlangıç adresi,
+- `.text` başlangıç adresi ve boyutu,
+- `.data` VMA/LMA durumu,
+- `.bss` SRAM kullanımı,
+- toplam flash kullanımı,
+- `new-firmware` imajının `0x00022000` staging kapasitesini aşıp aşmadığı.
+
+### 5. OAD Header ve Sembolleri Kontrol Et
+
+OAD header'ın ELF içinde kaldığını ve adresini görmek için:
+
+```powershell
+& "$TI\tiarmnm.exe" -n $OLD_ELF | Select-String "_imgHdr|ResetISR"
+& "$TI\tiarmnm.exe" -n $NEW_ELF | Select-String "_imgHdr|ResetISR"
+```
+
+GNU:
+
+```sh
+arm-none-eabi-nm -n build/simplelink/sensortag/cc1352r1/old-firmware.simplelink | grep "_imgHdr\|ResetISR"
+arm-none-eabi-nm -n build/simplelink/sensortag/cc1352r1/new-firmware.simplelink | grep "_imgHdr\|ResetISR"
+```
+
+Beklenen yorum:
+
+- `old-firmware` header/entry bilgisi active app tarafına işaret eder.
+- `new-firmware` header/entry bilgisi mevcut kodda `0x00030000` staging
+  adresine işaret eder.
+
+### 6. Paketlenecek Binary Boyutunu Kontrol Et
+
+`new-firmware.bin` üretildikten sonra boyut mutlaka staging kapasitesi ile
+karşılaştırılmalıdır:
+
+```powershell
+Get-Item build/simplelink/sensortag/cc1352r1/new-firmware.bin |
+  Select-Object FullName, Length
+```
+
+Beklenen üst sınır:
+
+```text
+HW3_IMAGE_MAX_PAYLOAD_SIZE = HW3_NEW_IMAGE_SIZE - HW3_IMAGE_HEADER_SIZE
+                           = 0x00022000 - 48
+                           = 139216 byte
+```
+
+Paketleme script'i bu sınırı kendisi de kontrol eder. Buna rağmen ELF
+analizinde boyutu rapora yazmak yararlı olur.
+
+### 7. BIM Map/HEX Analizini Rapora Ekle
+
+Verilen `bim_onchip.map` dosyasından BIM ve CCFG yerleşimini çıkarmak için:
+
+```powershell
+$BIM_MAP = "$HOME\Desktop\bim_onchip.map"
+Select-String -Path $BIM_MAP `
+  -Pattern "FLASH_BIM|FLASH_CERT|FLASH_FNPTR|FLASH_CCFG|ENTRY POINT|ResetISR|Bim_findImage|jumpToPrgEntry"
+```
+
+HEX dosyasının gerçekten `0x00056000` adresinden başladığını göstermek için:
+
+```powershell
+$BIM_HEX = "$HOME\Desktop\bim_onchip.hex"
+Get-Content $BIM_HEX -TotalCount 3
+Select-String -Path $BIM_HEX `
+  -Pattern "^:020000040005|^:20600000|^:207FA8|^:00000001"
+```
+
+Bu kayıtların yorumu:
+
+- `:020000040005F5` üst adresi `0x0005` yapar.
+- Ardından gelen `0x6000` offset'li veri kaydı ilk program adresinin
+  `0x00056000` olduğunu gösterir.
+- `0x7FA8` civarındaki kayıtlar `0x00057FA8` CCFG bölgesine karşılık gelir.
+
+### 8. Analiz Çıktılarını Dosyaya Al
+
+Rapor teslimi için komut çıktılarını dosyaya kaydetmek pratik olur:
+
+```powershell
+New-Item -ItemType Directory -Force analysis
+
+& "$TI\tiarmreadelf.exe" -S $OLD_ELF > analysis/old-sections.txt
+& "$TI\tiarmreadelf.exe" -S $NEW_ELF > analysis/new-sections.txt
+& "$TI\tiarmreadelf.exe" -l $NEW_ELF > analysis/new-program-headers.txt
+& "$TI\tiarmobjdump.exe" -h $OLD_ELF > analysis/old-objdump-sections.txt
+& "$TI\tiarmobjdump.exe" -h $NEW_ELF > analysis/new-objdump-sections.txt
+& "$TI\tiarmnm.exe" -n $OLD_ELF > analysis/old-symbols.txt
+& "$TI\tiarmnm.exe" -n $NEW_ELF > analysis/new-symbols.txt
+```
+
+## Paketleme Akışı
+
+Aşağıdaki komutlarda `BUILD_DIR`, derleme çıktısının bulunduğu klasördür:
+
+```text
+build/simplelink/sensortag/cc1352r1
+```
+
+`OBJCOPY` olarak kullanılan toolchain'e uygun araç seçilmelidir:
+
+```text
+GNU Arm toolchain : arm-none-eabi-objcopy
+TI Arm Clang     : C:/ti/ti_cgt_arm_llvm_3.2.2.LTS/bin/tiarmobjcopy.exe
+```
+
+`tiarmobjcopy.exe`, LLVM objcopy tabanlıdır ve GNU objcopy ile uyumlu
+parametreleri destekler.
+
+### 1. `old-firmware` HEX Üret
+
+Contiki-NG build sistemi genellikle `.hex` çıktısını kendisi üretir. Yine de
+manuel üretmek gerekirse:
 
 ```sh
 arm-none-eabi-objcopy -O ihex \
@@ -355,36 +729,31 @@ arm-none-eabi-objcopy -O ihex \
   build/simplelink/sensortag/cc1352r1/old-firmware.hex
 ```
 
-UniFlash ile `old-firmware.hex` dosyasini normal aktif uygulama olarak cihaza
-yukle.
+Bu dosya active app alanına yüklenir.
 
-### 2. new-firmware binary dosyasini uret
+### 2. `new-firmware` Binary Üret
+
+`HW3` container modeli için payload binary üretilecekse yalnızca uygulamanın
+taşınması gereken load section'ları alınmalıdır:
 
 ```sh
 arm-none-eabi-objcopy -O binary \
-  --only-section=.resetVecs \
+  --only-section=.image_header \
   --only-section=.text \
-  --only-section=.rodata \
   --only-section=.data \
-  --only-section=vtable_ram \
   --only-section=.ARM.exidx \
   build/simplelink/sensortag/cc1352r1/new-firmware.simplelink \
   build/simplelink/sensortag/cc1352r1/new-firmware.bin
 ```
 
-Bu komut yalnizca uygulamanin flash'ta tasinmasi gereken load section'larini
-alir. `.data` ve `vtable_ram` RAM'de calisan section'lar olsa da baslangic
-icerikleri flash'taki load image icinde tutuldugu icin payload'a dahil edilir.
-`.ccfg`, debug, symbol ve comment section'lari staging payload'una konmaz.
+Bu section listesi mevcut `new-firmware.ld` dosyasına göre seçilmiştir.
+`new-firmware.ld` içinde `.rodata*` girdileri `.text` output section'ına
+alınır; bu nedenle ayrıca `--only-section=.rodata` yazmaya gerek yoktur.
+Böylece `.ccfg`, debug, symbol ve comment section'ları payload'a girmez.
+Düz `objcopy -O binary` kullanılırsa `.ccfg` gibi yüksek adresli section'lar
+nedeniyle binary dosyası gereksiz şekilde büyüyebilir.
 
-Duz `objcopy -O binary` kullanilirsa `.ccfg` section'i yuzunden raw binary
-flash sonuna kadar uzayabilir. Paketleme script'i aktif uygulama sinirinin
-disindaki bytelari paketlemez; yine de yukaridaki section filtreli komut daha
-acik ve denetlenebilir bir cikti verir.
-
-### 3. new-firmware staging container dosyasini uret
-
-Windows'ta:
+### 3. `HW3` Staging Container Üret
 
 ```sh
 python tools/package_cc1352r_image.py \
@@ -394,56 +763,259 @@ python tools/package_cc1352r_image.py \
   --out-hex build/simplelink/sensortag/cc1352r1/new-firmware.container.hex
 ```
 
-Linux/macOS ortaminda `python3` kullanilabilir.
+Bu araç:
 
-### 4. staging alanini programla
+- payload'u okur,
+- gerekirse 4 byte hizasına `0xFF` ile pad eder,
+- payload CRC32 hesaplar,
+- header CRC32 hesaplar,
+- container dosyasını `0x00030000` base adresli Intel HEX olarak yazar,
+- payload boyutu staging kapasitesini aşarsa hata verir,
+- `target` adresi `0x00000000` değilse hata verir.
 
-UniFlash ile `new-firmware.container.hex` dosyasini yukle.
+Not: Bu paketleme akışı `HW3` custom container modelini gösterir. Mevcut
+`new-firmware` kaynakları ise `0x00030000` staging adresine linklenmiş
+durumdadır. Bu nedenle bu container'ın gerçek bir copy-to-active bootloader
+tarafından çalıştırılması için linker/header stratejisi ayrıca netleştirilmelidir.
 
-Kritik notlar:
+### 4. Staging Alanını Programla
 
-- Bu dosya aktif uygulama olarak yuklenmez.
-- Baslangic adresi container HEX icinde `0x00030000` olarak bulunur.
-- Header icindeki hedef adres `0x00000000` olur.
-- BIM/recovery staging adresine jump etmez; payload'u active app alanina
-  kopyalayip resetler veya active reset vektorune gecer.
-- Full chip erase / mass erase yapilmaz.
-- CCFG bolgesi korunur.
+`new-firmware.container.hex` yalnızca staging bölgesine yazılmalıdır:
 
-## 16. Odevin Pesinden Gidilecek Sorularina Kisa Cevaplar
+```text
+0x00030000 - 0x00051FFF
+```
 
-**Uygulamanin calisan ana imaji nereye yerlesecek?**
+Full chip erase yapılmamalıdır.
 
-`0x00000000 - 0x0002FFFF` araligindaki active app alanina yerlesir.
+## TI BIM ile Yükleme Akışı
 
-**Diske kaydedilecek yeni imaj hangi alana yazilacak?**
+Verilen `bim_onchip.hex` kullanılacaksa yükleme mantığı şu şekildedir:
 
-`0x00030000 - 0x00051FFF` araligindaki staging alanina yazilir.
+1. `bim_onchip.hex` son sektöre yazılır:
 
-**Ayni anda iki tam imaj saklanabiliyor mu?**
+   ```text
+   0x00056000 - 0x00057FFF
+   ```
 
-Maksimum boyutlu iki tam imaj saklanamaz. Bu projede aktif imaj 192 KiB, staged
-imaj ise en fazla yaklasik 136 KiB olacak sekilde sinirlandirilmistir.
+2. `old-firmware.hex` active app alanına yazılır:
 
-**Sadece staging alani varsa aktivasyon nasil yapilacak?**
+   ```text
+   0x00000000 - 0x0002FFFF
+   ```
 
-Staging tek basina aktivasyon yapmaz. Header/CRC dogrulamasi yapan ve yeni
-imaji aktif alana tasiyan bootloader/BIM gerekir.
+3. `new-firmware` staging alanına yazılır:
 
-**Flash sektor silme ve yazma islemleri mevcut calisan imaji nasil etkileyebilir?**
+   ```text
+   0x00030000 - 0x00051FFF
+   ```
 
-Aktif imajin bulundugu sayfa silinirse calisan kod, vektor tablosu veya sabit
-veriler bozulur. Bu nedenle yazma/silme islemleri staging gibi ayrilmis
-alanlara yapilmali ve aktif imaj ancak bootloader kontrolunde degistirilmelidir.
+   Bu adımda TI BIM'in okuyacağı OAD header'lı `new-firmware` çıktısı
+   kullanılmalıdır. `HW3` custom container HEX dosyası TI BIM tarafından
+   doğrudan okunmaz.
 
-## 17. Mevcut Sinirlar
+4. UniFlash veya benzeri araçlarda mass erase/full chip erase kapatılır.
 
-Bu proje yeni firmware'i staging alanina koyma stratejisini gosterir. Tek basina
-sunlari yapmaz:
+5. Programlama işlemleri bölge bazlı yapılır; son sektör korunur.
 
-- staging imajini otomatik boot etmez,
-- aktif firmware'i staging imaji ile degistirmez,
-- guc kesintisine dayanikli A/B boot sistemi uygulamaz.
+TI BIM tarafından doğrudan bulunacak imajların TI OAD header formatına uygun
+olması gerekir. `HW3` custom container header'ı TI BIM tarafından okunmaz.
 
-Bu eksikler, tam firmware degisimi icin neden bootloader/BIM gerektigini
-gosteren odev cevabinin bir parcasidir.
+## Boot Zinciri Akış Diyagramı
+
+Bu akış, verilen `bim_onchip_main.c` kodunun mantığını ve bu projedeki staging
+kararını özetler:
+
+```mermaid
+flowchart TD
+  A[Reset] --> B[ROM boot kodu]
+  B --> C{CCFG ve boot koşulları}
+  C --> D[BIM bölgesi: 0x00056000]
+  D --> E{OAD header ara}
+  E -->|Active app bulundu| F[Header, imgVld, metaVer, bimVer kontrolü]
+  E -->|Bulunamadı| G[Sonraki flash sayfasını tara]
+  G --> E
+  F --> H{CRC / security kontrolü geçerli mi?}
+  H -->|Evet| I[jumpToPrgEntry]
+  I --> J[old-firmware veya uygun new-firmware çalışır]
+  H -->|Hayır| G
+  E -->|Geçerli imaj yok| K[LED hata durumu veya low-power mode]
+```
+
+`HW3` custom container modeli kullanılıyorsa bu akışa ek olarak staging
+container'ını okuyup payload'u active app alanına kopyalayan ayrı bir
+bootloader/recovery adımı gerekir. Mevcut `old-firmware` yalnızca bu container'ı
+doğrular; kopyalama ve aktivasyon yapmaz.
+
+## Önemli Tasarım Ayrımı
+
+Bu depo iki farklı update fikrini aynı yerde gösterdiği için aşağıdaki ayrım
+kritiktir:
+
+| Konu | `HW3` container modeli | TI BIM/OAD modeli |
+| --- | --- | --- |
+| Header dosyası | `hw3_image.h` | `oad_hdr.c`, `oad_hdr_old.c` |
+| Header'ı kim okur? | `old-firmware.c` içindeki demo doğrulayıcı veya ileride yazılacak recovery kodu | `bim_onchip_main.c` içindeki TI BIM |
+| Yeni imaj nerede durur? | `0x00030000` staging | `0x00030000` staging veya OAD header'ın gösterdiği sayfa |
+| Header hedef adresi | `0x00000000` | `prgEntry` alanında mevcut kodda `0x00030000` |
+| Aktivasyon | Bootloader payload'u active app'e kopyalamalıdır | BIM geçerli imaja `jumpToPrgEntry()` ile geçer |
+| Mevcut kodda tam uygulanmış mı? | Hayır, yalnızca doğrulama var | BIM dosyaları referans olarak verilmiştir; depo içindeki uygulama TI BIM'i çağırmaz |
+
+Bu nedenle "new firmware nasıl çalışacak?" sorusunun cevabı seçilen modele
+bağlıdır:
+
+- Copy-to-active modeli seçilirse `new-firmware`, active app adresi olan
+  `0x00000000` için linklenmeli ve bir bootloader staging payload'unu active
+  app alanına kopyalamalıdır.
+- Staging'den geçiş modeli seçilirse `new-firmware.ld` ve `oad_hdr.c` içindeki
+  `0x00030000` ayarları anlamlıdır; imaj TI BIM'in beklediği OAD header ve CRC
+  kurallarına uygun üretilmelidir.
+
+Mevcut kaynak kodda `new-firmware.ld` ve `oad_hdr.c`, staging'den geçiş
+modeline daha yakındır. `tools/package_cc1352r_image.py` ise copy-to-active
+modelini gösteren ödev container aracıdır.
+
+## Neden İki Tam İmaj Her Zaman Saklanamaz?
+
+CC1352R flash kapasitesi 352 KiB'tir. Bu projede:
+
+- active app için 192 KiB,
+- staging için 136 KiB,
+- metadata/recovery/BIM+CCFG için 24 KiB
+
+ayrılmıştır.
+
+Dolayısıyla iki adet maksimum boyutlu tam uygulama imajını aynı anda tutmak
+mümkün değildir. Yeni imaj staging alanına sığmak zorundadır. Paketleme aracı
+bu nedenle payload boyutunu kontrol eder.
+
+## Flash Silme ve Yazma Riskleri
+
+Flash, RAM gibi serbestçe yazılamaz:
+
+- CC1352R flash sayfaları 8 KiB seviyesinde silinir.
+- Silme işlemi sayfadaki bitleri `1` durumuna getirir.
+- Programlama genellikle `1 -> 0` yönünde ilerler.
+- Aktif çalışan uygulama kendi kodunun bulunduğu flash sayfasını silerse sistem
+  çökebilir.
+- Güç kesilirse yarım yazılmış imaj kalabilir.
+- Son sektör silinirse BIM ve/veya CCFG bozulabilir.
+
+Bu nedenle tam firmware değişimi normal uygulama kodundan kontrolsüz biçimde
+yapılmamalıdır. Güvenilir bir BIM/bootloader veya recovery aşaması gerekir.
+
+## RAM Kısıtları ve Tampon Boyutlandırma
+
+CC1352R üzerinde SRAM 80 KiB olduğu için yeni firmware imajının tamamını RAM'e
+almak doğru bir strateji değildir. Gerçek OTA aktarımında:
+
+- firmware küçük bloklar halinde alınmalıdır,
+- blok boyutu ağ paket boyutu ve flash yazma sınırlarıyla uyumlu seçilmelidir,
+- pratik tamponlar 256 B, 512 B veya 1024 B gibi küçük değerlerde tutulmalıdır,
+- gelen bloklar RAM'de biriktirilmek yerine staging flash alanına parçalı
+  yazılmalıdır,
+- aktarım sonunda tüm imaj CRC32 veya benzeri bir bütünlük kontrolünden
+  geçirilmelidir.
+
+Bu depodaki donanım gösteriminde kablosuz aktarım uygulanmadığı için RAM tampon
+mekanizması kodlanmamıştır. Ancak staging alanı ve container doğrulaması, gerçek
+OTA aktarımında RAM yerine flash'a parçalı yazma stratejisinin nereye
+bağlanacağını gösterir.
+
+## CCFG ve Son Sektör Neden Kritik?
+
+CCFG cihaz konfigürasyonunu tutar:
+
+- bootloader enable/backdoor ayarları,
+- debug/JTAG erişim izinleri,
+- erase davranışları,
+- image-valid/boot davranışı ile ilgili alanlar,
+- flash koruma davranışları.
+
+Verilen `bim_onchip.map` dosyasında CCFG:
+
+```text
+0x00057FA8 - 0x00057FFF
+```
+
+aralığındadır. Ancak aynı 8 KiB sektörün başında BIM vardır:
+
+```text
+0x00056000 - 0x00057FFF
+```
+
+Bu nedenle son sektör hem boot hem de cihaz konfigürasyonu açısından kritik
+kabul edilmelidir.
+
+## Mevcut Sınırlar
+
+Bu proje aşağıdaki çıktıları sağlar:
+
+- CC1352R için flash yerleşimini tanımlar.
+- Active app ve staging alanlarını ayırır.
+- `old-firmware` ile staging header/CRC doğrulamasını gösterir.
+- `new-firmware` için staging bölgesinde çalışabilecek basit bir uygulama
+  örneği verir.
+- TI BIM dosyalarından gerçek boot yerleşiminin nasıl olduğunu belgeye ekler.
+
+Bu proje tek başına aşağıdaki işlemleri gerçekleştirmez:
+
+- staging imajını active app alanına kopyalamaz,
+- active app alanını silip yeniden yazmaz,
+- güç kesintisine dayanıklı rollback sistemi kurmaz,
+- metadata alanını gerçek update state machine olarak kullanmaz,
+- TI BIM'in beklediği final OAD CRC/post-build adımlarını otomatik üretmez,
+- `HW3` custom container'ı TI BIM formatına çevirmeyi yapmaz.
+
+## Kısa Cevaplar
+
+**Çalışan ana imaj nereye yerleşir?**
+
+`old-firmware` active app alanına yerleşir:
+
+```text
+0x00000000 - 0x0002FFFF
+```
+
+**Yeni imaj nereye yazılır?**
+
+Yeni imaj veya container staging alanına yazılır:
+
+```text
+0x00030000 - 0x00051FFF
+```
+
+**BIM nereye yazılır?**
+
+Verilen `bim_onchip.hex` dosyası son sektöre yazılır:
+
+```text
+0x00056000 - 0x00057FFF
+```
+
+**CCFG tam olarak nerede?**
+
+Verilen map dosyasına göre:
+
+```text
+0x00057FA8 - 0x00057FFF
+```
+
+Ancak sektör silme işlemi 8 KiB seviyesinde olduğu için tüm
+`0x00056000 - 0x00057FFF` aralığı korunmalıdır.
+
+**Aynı anda iki tam imaj saklanabilir mi?**
+
+Maksimum boyutlu iki tam imaj saklanamaz. Bu yerleşimde active app 192 KiB,
+staging ise 136 KiB ile sınırlıdır.
+
+**Sadece staging alanı aktivasyon için yeterli mi?**
+
+Hayır. Staging yalnızca yeni imajın saklandığı alandır. Aktivasyon için ya
+copy-to-active yapan bir bootloader gerekir ya da TI BIM gibi staging'deki
+geçerli OAD imajına geçen bir boot aşaması gerekir.
+
+**Full chip erase yapılmalı mı?**
+
+Hayır. Full chip erase BIM ve CCFG sektörünü silebilir. Bölge bazlı programlama
+yapılmalı, son sektör korunmalıdır.
