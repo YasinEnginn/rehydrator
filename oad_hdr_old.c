@@ -1,57 +1,33 @@
 #include <stdint.h>
-typedef struct __attribute__((packed)) {
-    uint8_t  imgID[8];
-    uint32_t crc32;
-    uint8_t  bimVer;
-    uint8_t  metaVer;
-    uint16_t techType;
-    uint8_t  imgCpStat;
-    uint8_t  crcStat;
-    uint8_t  imgType;
-    uint8_t  imgNo;
-    uint32_t imgVld;
-    uint32_t len;
-    uint32_t prgEntry;
-    uint8_t  softVer[4];
-    uint32_t imgEndAddr;
-    uint16_t hdrLen;
-    uint16_t rfu;
-} imgFixedHdr_t;
-typedef struct __attribute__((packed)) {
-    uint8_t  segTypeImg;
-    uint16_t wirelessTech;
-    uint8_t  rfu;
-    uint32_t imgSegLen;
-    uint32_t startAddr;
-} imgPayloadSeg_t;
-typedef struct __attribute__((packed)) {
-    imgFixedHdr_t   fixedHdr;
-    imgPayloadSeg_t imgPayload;
-} imgHdr_t;
+
+#include <ti/common/cc26xx/oad/oad_image_header.h>
+
+#include "oad_layout.h"
+
 const imgHdr_t _imgHdr __attribute__((section(".image_header"), used)) = {
     .fixedHdr = {
-        .imgID      = {'C','C','1','3','x','2','R','1'},
-        .crc32      = 0xFFFFFFFF,
-        .bimVer     = 0x3,
-        .metaVer    = 0x1,
-        .techType   = 0xFFBF,
-        .imgCpStat  = 0xFF,
-        .crcStat    = 0xFF,
-        .imgType    = 0x7,
+        .imgID      = OAD_IMG_ID_VAL,
+        .crc32      = DEFAULT_CRC,
+        .bimVer     = BIM_VER,
+        .metaVer    = META_VER,
+        .techType   = OAD_WIRELESS_TECH_PROPRF,
+        .imgCpStat  = DEFAULT_STATE,
+        .crcStat    = DEFAULT_STATE,
+        .imgType    = OAD_IMG_TYPE_PERSISTENT_APP,
         .imgNo      = 0x0,
-        .imgVld     = 0xFFFFFFFF,
-        .len        = 0xFFFFFFFF,
-        .prgEntry   = 0x00000000,
+        .imgVld     = INVALID_ADDR,
+        .len        = INVALID_LEN,
+        .prgEntry   = OAD_ACTIVE_ENTRY,
         .softVer    = {0x00, 0x00, 0x01, 0x00},
-        .imgEndAddr = 0xFFFFFFFF,
-        .hdrLen     = sizeof(imgHdr_t),
+        .imgEndAddr = INVALID_ADDR,
+        .hdrLen     = OAD_IMG_FULL_HDR_LEN,
         .rfu        = 0xFFFF,
     },
     .imgPayload = {
-        .segTypeImg   = 0x1,
-        .wirelessTech = 0xFFBF,
-        .rfu          = 0xFF,
-        .imgSegLen    = 0xFFFFFFFF,
-        .startAddr    = 0x00000000,
+        .segTypeImg   = IMG_PAYLOAD_SEG_ID,
+        .wirelessTech = OAD_WIRELESS_TECH_PROPRF,
+        .rfu          = DEFAULT_STATE,
+        .imgSegLen    = INVALID_LEN,
+        .startAddr    = OAD_ACTIVE_IMAGE_BASE,
     }
 };
