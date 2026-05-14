@@ -1,161 +1,165 @@
 <div align="center">
 
-<img src="https://readme-typing-svg.demolab.com?font=Fira+Code&size=24&duration=3000&pause=800&color=00ADD8&center=true&vCenter=true&width=850&lines=CC1352R+TI+BIM%2FOAD+Yerlesimi;BIM+Degismeden+Firmware+Duzeni;User+Imaj+Page+0;Persistent+Fallback+0x30000;BIL304+HW3+3.+Asama" />
+<img src="https://readme-typing-svg.demolab.com?font=Fira+Code&size=24&duration=3000&pause=800&color=00ADD8&center=true&vCenter=true&width=850&lines=BIL304+HW3+3.+A%C5%9Fama;CC1352R+Ger%C3%A7ekleme;Donan%C4%B1m+Uyarlama;TI+BIM%2FOAD+Yerle%C5%9Fimi" />
 
-<h1>BIL304 HW3 - CC1352R TI BIM/OAD Firmware Yerlesimi</h1>
+<h1>BIL304 HW3 - 3. Aşama</h1>
 
 <p>
   <img src="https://img.shields.io/badge/Hedef-CC1352R-00ADD8" />
   <img src="https://img.shields.io/badge/OS-Contiki--NG-success" />
   <img src="https://img.shields.io/badge/Boot-TI%20BIM%2FOAD-orange" />
-  <img src="https://img.shields.io/badge/BIM-Degismeden-blue" />
-  <img src="https://img.shields.io/badge/Kontrol-ELF%20%2B%20Section-8A2BE2" />
+  <img src="https://img.shields.io/badge/Kapsam-Donan%C4%B1m%20Uyarlama-blue" />
 </p>
 
 <p>
-  <b>CC1352R uzerinde mevcut TI BIM dosyasini degistirmeden user firmware,
-  persistent fallback firmware ve CCFG/BIM yerlesimini aciklayan calisma.</b>
+  <b>CC1352R Gerçekleme ve Donanım Uyarlama Görevi</b>
 </p>
 
 <p>
-  User image page 0 | Persistent fallback 0x30000 | OAD header |
-  CCFG guvenligi | ELF/section kontrolu
-</p>
-
-<p>
-  <a href="#projedeki-dosyalar">Dosyalar</a> |
-  <a href="#flash-yerlesimi">Flash Yerlesimi</a> |
-  <a href="#boot-akisi">Boot Akisi</a> |
-  <a href="#derleme">Derleme</a> |
-  <a href="#kontrol-komutlari">Kontrol</a>
+  Mevcut BIM korunur | User firmware page 0 | Persistent fallback 0x30000
 </p>
 
 </div>
 
-Bu repo CC1352R uzerinde **TI BIM/OAD** akisiyla iki uygulama imaji
-yerlestirmek icin hazirlandi. Bu versiyonun temel karari sudur:
+Bu depo, ödevin yalnızca **3. CC1352R Gerçekleme ve Donanım Uyarlama**
+kısmı için hazırlanmıştır. Amaç, Contiki-NG ile derlenen iki firmware imajını
+CC1352R flash yerleşimine uyarlamak ve mevcut TI BIM/OAD akışıyla
+çalışabilecek şekilde doğrulamaktır.
 
-```text
-BIM dosyasi degistirilmeyecek.
-Firmware layout mevcut BIM'in arama sirasina uydurulacak.
-```
+Bu çalışmada BIM dosyası değiştirilmez. Firmware tarafındaki linker script,
+OAD header ve flash adresleri mevcut BIM'in arama sırasına göre düzenlenir.
 
-Mevcut Debug_unsecure BIM once page 0'da `APPSTACKLIB` user imaji arar.
-User imaj bulunamazsa page 1'den itibaren `PERSISTENT_APP` fallback imaji
-tarar. Bu yuzden user imaj page 0'a, persistent fallback imaj `0x00030000`
-slotuna yerlestirilir.
+## Kapsam
 
-## Projedeki Dosyalar
+Yapılanlar:
 
-| Dosya | Gorev |
-| --- | --- |
-| `new-firmware.c` | User uygulama. BIM'in ilk aradigi `APPSTACKLIB` imajidir. |
-| `old-firmware.c` | Persistent/fallback uygulama. User imaj gecersizse BIM bunu secebilir. |
-| `oad_layout.h` | Flash slotlari, OAD header boyutu, entry adresleri ve firmware versiyonlari. |
-| `oad_image_header.h` | Docker/Contiki build icin gereken TI OAD header sabitleri ve struct tanimlari. |
-| `oad_hdr.c` | User imaj icin TI OAD image header. |
-| `oad_hdr_old.c` | Persistent fallback imaj icin TI OAD image header. |
-| `new-firmware.ld` | User imaji `0x00000000` slotuna linkler. |
-| `old-firmware.ld` | Persistent fallback imaji `0x00030000` slotuna linkler. |
-| `Makefile` | Contiki projelerini ve ilgili OAD header kaynaklarini build'e ekler. |
-| `project-conf.h` | Contiki log seviyesini ayarlar. |
+- `new-firmware`, user imaj olarak page 0'a yerleştirildi.
+- `old-firmware`, persistent fallback imaj olarak `0x00030000` slotuna yerleştirildi.
+- Her iki imaj için TI OAD uyumlu image header eklendi.
+- Linker scriptlerde OAD header, reset vector, DMA, stack ve RAM bölgeleri düzenlendi.
+- ELF section ve OAD header içerikleri `readelf` / `objdump` ile doğrulandı.
 
-## Flash Yerlesimi
+Kapsam dışı:
 
-CC1352R program flash alani `352 KiB` (`0x00058000`) kabul edilir. Sayfa
-boyutu `8 KiB` (`0x2000`).
+- BIM kaynak kodunu değiştirmek.
+- Yeni bootloader yazmak.
+- Release/secure OAD imzalama ve CRC paketleme akışını otomatikleştirmek.
 
-| Alan | Baslangic | Bitis | Boyut | Gorev |
-| --- | ---: | ---: | ---: | --- |
-| User image | `0x00000000` | `0x0002FFFF` | 192 KiB | BIM'in ilk aradigi `APPSTACKLIB` imaj |
-| Persistent fallback image | `0x00030000` | `0x00051FFF` | 136 KiB | User imaj yoksa/gecersizse fallback |
-| Update metadata | `0x00052000` | `0x00053FFF` | 8 KiB | Ayrilmis alan |
-| Recovery/reserved | `0x00054000` | `0x00055FFF` | 8 KiB | Ayrilmis alan |
-| BIM + CCFG | `0x00056000` | `0x00057FFF` | 8 KiB | TI BIM ve CCFG |
+## Bellek Yerleşimi
 
-Toplam:
+CC1352R için temel bellek alanları:
 
-```text
-192 KiB + 136 KiB + 8 KiB + 8 KiB + 8 KiB = 352 KiB
-```
+| Bellek | Adres Aralığı | Kullanım |
+| --- | ---: | --- |
+| Flash | `0x00000000 - 0x00057FFF` | Uygulama imajları, OAD header, BIM ve CCFG |
+| SRAM | `0x20000000 - 0x20013FFF` | Çalışma zamanı veri, stack, bss ve DMA tabloları |
+| GPRAM | `0x11000000 - 0x11001FFF` | Cache/GPRAM bölgesi |
+| ROM | Cihaz içinde sabit | TI ROM boot kodu ve yardımcı rutinler |
 
-## OAD Header ve Entry
+Flash içindeki firmware yerleşimi:
 
-Her uygulama slotunun ilk `0x100` byte'i TI OAD image header icin ayrilir.
-Reset vektorleri bu header alanindan sonra baslar.
+| Alan | Başlangıç | Bitiş | Görev |
+| --- | ---: | ---: | --- |
+| User image | `0x00000000` | `0x0002FFFF` | BIM'in ilk aradığı `APPSTACKLIB` imaj |
+| Persistent fallback | `0x00030000` | `0x00051FFF` | User imaj yoksa/geçersizse fallback |
+| Metadata | `0x00052000` | `0x00053FFF` | Ayrılmış alan |
+| Recovery | `0x00054000` | `0x00055FFF` | Ayrılmış alan |
+| BIM + CCFG | `0x00056000` | `0x00057FFF` | Mevcut TI BIM ve CCFG |
 
-User imaj:
+Her imaj slotunun ilk `0x100` byte'ı OAD image header için ayrılır.
+Reset vector tablosu header alanından sonra başlar.
 
-```text
-0x00000000  TI OAD image header
-0x00000100  reset vectors / prgEntry
-```
+| İmaj | Header | Entry / Reset Vector | Image Type |
+| --- | ---: | ---: | --- |
+| `new-firmware` | `0x00000000` | `0x00000100` | `APPSTACKLIB` |
+| `old-firmware` | `0x00030000` | `0x00030100` | `PERSISTENT_APP` |
 
-Persistent fallback imaj:
+## Boot Akışı
 
-```text
-0x00030000  TI OAD image header
-0x00030100  reset vectors / prgEntry
-```
-
-`oad_layout.h` icindeki ilgili sabitler:
-
-```c
-#define OAD_USER_IMAGE_BASE         0x00000000UL
-#define OAD_PERSISTENT_IMAGE_BASE   0x00030000UL
-#define OAD_IMAGE_HEADER_SIZE       0x00000100UL
-#define OAD_USER_ENTRY              (OAD_USER_IMAGE_BASE + OAD_IMAGE_HEADER_SIZE)
-#define OAD_PERSISTENT_ENTRY        (OAD_PERSISTENT_IMAGE_BASE + OAD_IMAGE_HEADER_SIZE)
-```
-
-## OAD Header Icerigi
-
-User imaj header'i:
-
-```text
-imgType   = OAD_IMG_TYPE_APPSTACKLIB
-startAddr = 0x00000000
-prgEntry  = 0x00000100
-softVer   = 0x00020000
-```
-
-Persistent fallback imaj header'i:
-
-```text
-imgType   = OAD_IMG_TYPE_PERSISTENT_APP
-startAddr = 0x00030000
-prgEntry  = 0x00030100
-softVer   = 0x00010000
-```
-
-Header yapilari repo icindeki TI OAD uyumlu dosyadan gelir:
-
-```c
-#include "oad_image_header.h"
-```
-
-## Boot Akisi
-
-Bu repo mevcut BIM dosyasini degistirmeyen akisa gore duzenlenmistir.
+Mevcut BIM şu sırayla imaj arar:
 
 ```text
 Reset
-  -> ROM/CCFG ayarlari BIM bolgesine gider
-  -> BIM page 0'da APPSTACKLIB user imaji arar
-  -> Gecerli user imaj varsa 0x00000100 adresine atlar
-  -> User imaj yoksa/gecersizse page 1'den itibaren PERSISTENT_APP arar
-  -> Persistent fallback imaj gecerse 0x00030100 adresine atlar
+  -> ROM/CCFG ayarları BIM bölgesine yönlendirir
+  -> BIM page 0'da APPSTACKLIB user imajı arar
+  -> Geçerli user imaj varsa 0x00000100 adresine atlar
+  -> User imaj yoksa/geçersizse PERSISTENT_APP fallback imajı arar
+  -> Fallback imaj geçerse 0x00030100 adresine atlar
 ```
 
-Beklenen LED davranisi:
+Beklenen davranış:
 
-- user imaj calisiyorsa kirmizi LED heartbeat,
-- persistent fallback imaj calisiyorsa yesil LED heartbeat.
+- `new-firmware` çalışıyorsa kırmızı LED heartbeat verir.
+- `old-firmware` çalışıyorsa yeşil LED heartbeat verir.
+
+## Sorular ve Cevaplar
+
+Bu bölüm, ödevde istenen soruların güncel TI/Contiki kaynaklarına göre kısa
+cevaplarıdır.
+
+| Soru | Cevap |
+| --- | --- |
+| Uygulamanın çalışan ana imajı nereye yerleşecek? | Mevcut BIM önce page 0'da user image aradığı için `new-firmware` `0x00000000` adresine yerleşir. Entry adresi `0x00000100` olur. |
+| Diske/flash'a kaydedilecek ikinci imaj hangi alana yazılacak? | Bu çalışmada ikinci imaj için internal flash'ta `0x00030000 - 0x00051FFF` aralığı ayrıldı. Burada `old-firmware` persistent fallback imajı tutulur. |
+| Aynı anda iki tam imaj saklanabiliyor mu? | Bu örnek imajlar küçük olduğu için evet. TI on-chip OAD dokümanı ise bunun flash yerleşimine ve user uygulamanın yeterince küçük olmasına bağlı olduğunu belirtir. |
+| Sadece staging alanı varsa aktivasyon nasıl yapılır? | Staging imajı doğrudan seçilmeyecekse BIM/bootloader/recovery kodu tarafından doğrulanıp aktif alana kopyalanmalı veya OAD header üzerinden seçilebilir hale getirilmelidir. Bu projede mevcut BIM'e uyumlu iki seçilebilir slot kullanıldı. |
+| Flash erase/write işlemleri mevcut çalışan imajı nasıl etkiler? | Flash silme işlemi sektör bazlıdır. Çalışan imajın veya BIM/CCFG alanının bulunduğu sektör silinirse cihaz boot edemeyebilir. Bu yüzden full chip erase yerine bölge bazlı programlama kullanılır. |
+
+## Beklenen Çıktılar
+
+Ödevin 3. kısmı için beklenen teknik çıktılar bu repoda şu şekilde karşılanır:
+
+| Beklenen çıktı | Repodaki karşılığı |
+| --- | --- |
+| Flash ve RAM kullanımını gösteren bellek tablosu | `Bellek Yerleşimi` bölümü ve `oad_layout.h` |
+| Boot zincirini gösteren kısa akış diyagramı | `Boot Akışı` bölümü |
+| CCFG alanının neden kritik olduğu | `CCFG Notu` bölümü |
+| İkinci firmware kaydı için yerleşim stratejisi | `İkinci Firmware Stratejisi` bölümü |
+| Tam firmware değiştirme için neden bootloader gerektiği | Staging/aktivasyon açıklaması ve mevcut BIM/OAD seçimi |
+| ELF/section doğrulaması | `readelf` ve `objdump` komutlarıyla `.image_header`, `.resetVecs`, OAD header alanları |
+
+## CCFG Notu
+
+CCFG, reset sonrası cihaz davranışını ve boot zincirini etkileyen kritik flash
+alanıdır. Bu projede BIM + CCFG bölgesi son sektörde tutulur:
+
+```text
+0x00056000 - 0x00057FFF
+```
+
+Bu bölge yanlışlıkla silinirse cihaz beklenen BIM akışına giremeyebilir.
+Bu yüzden yükleme yaparken full chip erase yerine bölge bazlı programlama
+kullanılmalıdır.
+
+## İkinci Firmware Stratejisi
+
+Mevcut BIM değiştirilmediği için ikinci imaj için ayrı bir flash slotu
+kullanılır. Bu çalışmada `0x00030000 - 0x00051FFF` aralığı persistent fallback
+imaj için ayrılmıştır. Böylece page 0'daki user imaj çalışmazsa BIM bu
+fallback imaja geçebilir.
+
+Tam firmware değiştirme veya staging alanındaki imajı aktif alana kopyalama
+gibi işlemler için ek bootloader/recovery mantığı gerekir. Bu çalışmada yeni
+bootloader yazılmamış, mevcut TI BIM/OAD modeli kullanılmıştır.
+
+## Proje Dosyaları
+
+| Dosya | Görev |
+| --- | --- |
+| `new-firmware.c` | User firmware uygulaması |
+| `old-firmware.c` | Persistent fallback uygulaması |
+| `oad_hdr.c` | User imaj için OAD header |
+| `oad_hdr_old.c` | Persistent fallback imaj için OAD header |
+| `oad_image_header.h` | Gerekli TI OAD header sabitleri ve struct tanımları |
+| `oad_layout.h` | Flash adresleri ve firmware versiyonları |
+| `new-firmware.ld` | User imajı page 0'a linkler |
+| `old-firmware.ld` | Persistent fallback imajı `0x00030000` slotuna linkler |
+| `Makefile` | Contiki build kuralları |
 
 ## Derleme
 
-Contiki ortamini Docker icinde kullanirken iki imaj ayri derlenmelidir. Bunun
-sebebi Contiki-NG `LDSCRIPT` degiskenini proje bazli degil global kullanmasidir.
+Contiki-NG `LDSCRIPT` değişkenini global kullandığı için iki imaj ayrı
+derlenmelidir.
 
 User imaj:
 
@@ -169,60 +173,9 @@ Persistent fallback imaj:
 make TARGET=simplelink BOARD=sensortag/cc1352r1 LDSCRIPT=old-firmware.ld old-firmware
 ```
 
-Docker icinde `CONTIKI` yolu otomatik degilse:
+## Doğrulama
 
-```sh
-make TARGET=simplelink BOARD=sensortag/cc1352r1 CONTIKI=/path/to/contiki-ng LDSCRIPT=new-firmware.ld new-firmware
-make TARGET=simplelink BOARD=sensortag/cc1352r1 CONTIKI=/path/to/contiki-ng LDSCRIPT=old-firmware.ld old-firmware
-```
-
-Beklenen ELF dosyalari:
-
-```text
-build/simplelink/sensortag/cc1352r1/new-firmware.simplelink
-build/simplelink/sensortag/cc1352r1/old-firmware.simplelink
-```
-
-## OAD Image Tool
-
-`oad_hdr.c` ve `oad_hdr_old.c` icindeki `crc32`, `len`, `imgEndAddr` ve segment
-length alanlari build oncesinde placeholder durumdadir. Debug BIM denemesinde
-bu kabul edilebilir. Release veya secure akista TI OAD Image Tool bu alanlari
-doldurmalidir.
-
-Aracin parametreleri SDK surumune gore degisebildigi icin build ortaminda once
-yardim ciktisi kontrol edilmelidir:
-
-```sh
-oad_image_tool --help
-```
-
-## Cihaza Yukleme Sirasi
-
-Bolge bazli programlama yapilmalidir. Full chip erase, son sektordeki BIM/CCFG
-alanini silebilir.
-
-1. BIM imaji:
-
-```text
-0x00056000 - 0x00057FFF
-```
-
-2. User imaj:
-
-```text
-0x00000000 - 0x0002FFFF
-```
-
-3. Persistent fallback imaj:
-
-```text
-0x00030000 - 0x00051FFF
-```
-
-## Kontrol Komutlari
-
-ELF icinde header ve entry adreslerini kontrol etmek icin:
+Section adreslerini kontrol etmek için:
 
 ```sh
 arm-none-eabi-readelf -S build/simplelink/sensortag/cc1352r1/new-firmware.simplelink
@@ -236,46 +189,53 @@ new-firmware: .image_header 0x00000000, .resetVecs 0x00000100
 old-firmware: .image_header 0x00030000, .resetVecs 0x00030100
 ```
 
-Header icerigini kontrol etmek icin:
+OAD header içeriğini kontrol etmek için:
 
 ```sh
 arm-none-eabi-objdump -s -j .image_header build/simplelink/sensortag/cc1352r1/new-firmware.simplelink
 arm-none-eabi-objdump -s -j .image_header build/simplelink/sensortag/cc1352r1/old-firmware.simplelink
 ```
 
-Beklenen magic:
+Kontrol edilen temel alanlar:
 
 ```text
-43 43 31 33 78 32 52 31 = CC13x2R1
+new-firmware:
+  magic     = CC13x2R1
+  imgType   = 0x07
+  prgEntry  = 0x00000100
+  startAddr = 0x00000000
+
+old-firmware:
+  magic     = CC13x2R1
+  imgType   = 0x00
+  prgEntry  = 0x00030100
+  startAddr = 0x00030000
 ```
 
-Kontrol edilmesi gerekenler:
+## Cihaza Yükleme
 
-- `.image_header` user imajda `0x00000000`,
-- `.resetVecs` user imajda `0x00000100`,
-- `.image_header` persistent fallback imajda `0x00030000`,
-- `.resetVecs` persistent fallback imajda `0x00030100`,
-- uygulama imajlari `0x00056000 - 0x00057FFF` BIM/CCFG alanina tasmaz.
+Full chip erase yapılmamalıdır; BIM/CCFG bölgesi korunmalıdır.
 
-## Notlar
+Yükleme sırası:
 
-- Bu repo TI BIM kaynak projesini icermez.
-- Bu layout, mevcut BIM dosyasini degistirmeme kararina gore secilmistir.
-- Docker/Contiki build ortami repo icinde degildir.
-- Release/secure OAD icin CRC/signature/post-build adimlari TI OAD Image Tool
-  ile tamamlanmalidir.
-- Flash yuklerken BIM/CCFG son sektoru korunmalidir.
+```text
+1. BIM             -> 0x00056000 - 0x00057FFF
+2. new-firmware    -> 0x00000000 - 0x0002FFFF
+3. old-firmware    -> 0x00030000 - 0x00051FFF
+```
 
-## TI Kaynaklari
+## Not
 
-TI OAD image header:
+Debug BIM denemesinde OAD header içindeki `crc32`, `len`, `imgEndAddr` ve
+segment length alanlarının `0xFFFFFFFF` kalması kabul edilebilir. Release veya
+secure OAD akışı için bu alanlar TI OAD Image Tool ile doldurulmalıdır.
 
-https://software-dl.ti.com/simplelink/esd/simplelink_cc13x2_sdk/1.60.00.29_new/exports/docs/ti154stack/html/oad/image-header.html
+## Kaynaklar
 
-TI OAD Image Tool:
-
-https://software-dl.ti.com/simplelink/esd/simplelink_cc13x2_26x2_sdk/4.10.00.78/exports/docs/proprietary-rf/proprietary-rf-users-guide/oad/tools.html
-
-TI OAD linker duzeni:
-
-https://software-dl.ti.com/simplelink/esd/simplelink_cc13x2_26x2_sdk/4.40.04.04/exports/docs/thread/html/thread-oad/create-tiop-oad-image.html
+- TI CC1352R ürün sayfası: https://www.ti.com/product/CC1352R
+- TI CC1352R datasheet: https://www.ti.com/lit/ds/symlink/cc1352r.pdf
+- TI güncel BIM dokümanı: https://software-dl.ti.com/simplelink/esd/simplelink_cc13xx_cc26xx_sdk/latest/exports/docs/ble5stack/ble_user_guide/html/oad-secure/bim.html
+- TI güncel OAD image header dokümanı: https://software-dl.ti.com/simplelink/esd/simplelink_cc13xx_cc26xx_sdk/latest/exports/docs/ble5stack/ble_user_guide/doxygen/oad/html/group___o_a_d___i_m_a_g_e___h_e_a_d_e_r.html
+- TI SimpleLink CC13xx/CC26xx SDK OAD girişi: https://software-dl.ti.com/simplelink/esd/simplelink_cc13xx_cc26xx_sdk/8.32.00.07/exports/docs/dmm/dmm_user_guide/html/oad-secure/intro.html
+- TI ROM bootloader / CCFG notları: https://www.ti.com/lit/an/swra466e/swra466e.pdf
+- Contiki-NG SimpleLink platform dokümanı: https://docs.contiki-ng.org/en/master/doc/platforms/simplelink.html
