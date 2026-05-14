@@ -1,7 +1,6 @@
 #include <stdint.h>
 
-#include <ti/common/cc26xx/oad/oad_image_header.h>
-
+#include "oad_image_header.h"
 #include "oad_layout.h"
 
 const imgHdr_t _imgHdr __attribute__((section(".image_header"), used)) = {
@@ -17,7 +16,7 @@ const imgHdr_t _imgHdr __attribute__((section(".image_header"), used)) = {
         .imgNo      = 0x0,
         .imgVld     = INVALID_ADDR,
         .len        = INVALID_LEN,
-        .prgEntry   = OAD_ACTIVE_ENTRY,
+        .prgEntry   = OAD_PERSISTENT_ENTRY,
         .softVer    = {0x00, 0x00, 0x01, 0x00},
         .imgEndAddr = INVALID_ADDR,
         .hdrLen     = OAD_IMG_FULL_HDR_LEN,
@@ -28,6 +27,6 @@ const imgHdr_t _imgHdr __attribute__((section(".image_header"), used)) = {
         .wirelessTech = OAD_WIRELESS_TECH_PROPRF,
         .rfu          = DEFAULT_STATE,
         .imgSegLen    = INVALID_LEN,
-        .startAddr    = OAD_ACTIVE_IMAGE_BASE,
+        .startAddr    = OAD_PERSISTENT_IMAGE_BASE,
     }
 };
