@@ -77,7 +77,8 @@ README kısa tutulmuştur; ayrıntılı teknik açıklamalar `docs/` altındadı
 | [docs/build-and-verification.md](docs/build-and-verification.md) | Derleme komutları, upload artifact üretimi, Docker'dan dosya alma, section/header doğrulaması |
 | [docs/bim-onchip-notes.md](docs/bim-onchip-notes.md) | TI BIM projesi, `Debug_unsecure` seçimi, BIM map/symbol adresleri ve çıkan kararlar |
 | [docs/uniflash-guide.md](docs/uniflash-guide.md) | UniFlash ile güvenli yükleme sırası, HEX/BIN farkı ve beklenen LED davranışı |
-| [docs/references.md](docs/references.md) | TI, UniFlash ve Contiki-NG kaynak bağlantıları |
+| [docs/glossary.md](docs/glossary.md) | BIM, OAD, CCFG, slot, image type, section ve artifact terimleri sözlüğü |
+| [docs/references.md](docs/references.md) | TI, UniFlash, Contiki-NG, GNU araçları, Mermaid ve görsel kaynak bağlantıları |
 | [scripts/verify-layout.sh](scripts/verify-layout.sh) | Build sonrası `.image_header` ve `.resetVecs` adreslerini kontrol eden yardımcı script |
 
 ## Kapsam
@@ -148,6 +149,7 @@ yoksa persistent fallback slotundaki `old-firmware` imajına geçer.
 | ELF/section doğrulaması | [docs/build-and-verification.md](docs/build-and-verification.md) |
 | Cihaza yüklenecek dosyaların üretimi | [docs/build-and-verification.md](docs/build-and-verification.md) |
 | UniFlash yükleme sırası | [docs/uniflash-guide.md](docs/uniflash-guide.md) |
+| Terimler sözlüğü | [docs/glossary.md](docs/glossary.md) |
 
 ## Not
 
