@@ -1,0 +1,100 @@
+name: Checks
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  repository-checks:
+    name: Repository checks
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Check for generated artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          forbidden="$(git ls-files | grep -E '(^upload/|^build/|^Debug/|(^|/)[^/]+\.(hex|bin|elf|out|map|lst|o|d)$)' || true)"
+          if [ -n "$forbidden" ]; then
+            echo "Generated artifacts should not be committed:"
+            echo "$forbidden"
+            exit 1
+          fi
+
+      - name: Lint Markdown
+        run: |
+          npx --yes markdownlint-cli2 \
+            "README.md" \
+            "CHANGELOG.md" \
+            "SECURITY.md" \
+            "docs/**/*.md" \
+            ".github/ISSUE_TEMPLATE/*.md"
+
+      - name: Basic C syntax check
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          mkdir -p .ci-stubs/sys .ci-stubs/dev
+
+          cat > .ci-stubs/contiki.h <<'EOF'
+          #ifndef CONTIKI_H_
+          #define CONTIKI_H_
+          #define PROCESS(name, description)
+          #define AUTOSTART_PROCESSES(...)
+          #define PROCESS_THREAD(name, ev, data) void name(int ev, void *data)
+          #define PROCESS_BEGIN()
+          #define PROCESS_END()
+          #define PROCESS_WAIT_EVENT_UNTIL(condition) do { if(!(condition)) { } } while(0)
+          #define PROCESS_EVENT_TIMER 1
+          #define CLOCK_SECOND 1
+          #endif
+          EOF
+
+          cat > .ci-stubs/sys/etimer.h <<'EOF'
+          #ifndef SYS_ETIMER_H_
+          #define SYS_ETIMER_H_
+          struct etimer { int placeholder; };
+          void etimer_set(struct etimer *timer, int interval);
+          void etimer_reset(struct etimer *timer);
+          #endif
+          EOF
+
+          cat > .ci-stubs/sys/log.h <<'EOF'
+          #ifndef SYS_LOG_H_
+          #define SYS_LOG_H_
+          #define LOG_LEVEL_INFO 1
+          #define LOG_INFO(...)
+          #endif
+          EOF
+
+          cat > .ci-stubs/dev/leds.h <<'EOF'
+          #ifndef DEV_LEDS_H_
+          #define DEV_LEDS_H_
+          #define LEDS_GREEN 1
+          #define LEDS_RED 2
+          void leds_on(int leds);
+          void leds_toggle(int leds);
+          #endif
+          EOF
+
+          gcc -std=c99 -fsyntax-only -Wall -Wextra -I.ci-stubs -I. \
+            old-firmware.c \
+            new-firmware.c \
+            oad_hdr.c \
+            oad_hdr_old.c
+
+      - name: Check helper scripts
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n scripts/verify-layout.sh
