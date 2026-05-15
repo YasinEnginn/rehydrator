@@ -16,7 +16,7 @@
 </p>
 
 <p>
-  Mevcut BIM korunur | User firmware page 0 | Persistent fallback 0x30000
+  Mevcut BIM korunur | Old firmware fallback 0x30000 | New firmware page 0
 </p>
 
 </div>
@@ -33,8 +33,8 @@ OAD header ve flash adresleri mevcut BIM'in arama sırasına göre düzenlenir.
 
 Yapılanlar:
 
-- `new-firmware`, user imaj olarak page 0'a yerleştirildi.
-- `old-firmware`, persistent fallback imaj olarak `0x00030000` slotuna yerleştirildi.
+- `old-firmware`, eski ve ilk yüklenecek persistent fallback imaj olarak `0x00030000` slotuna yerleştirildi.
+- `new-firmware`, yeni firmware/user imaj olarak page 0'a yerleştirildi.
 - Her iki imaj için TI OAD uyumlu image header eklendi.
 - Linker scriptlerde OAD header, reset vector, DMA, stack ve RAM bölgeleri düzenlendi.
 - ELF section ve OAD header içerikleri `readelf` / `objdump` ile doğrulanabilir hale getirildi.
@@ -71,8 +71,8 @@ Reset vector tablosu header alanından sonra başlar.
 
 | İmaj | Header | Entry / Reset Vector | Image Type |
 | --- | ---: | ---: | --- |
-| `new-firmware` | `0x00000000` | `0x00000100` | `APPSTACKLIB` |
 | `old-firmware` | `0x00030000` | `0x00030100` | `PERSISTENT_APP` |
+| `new-firmware` | `0x00000000` | `0x00000100` | `APPSTACKLIB` |
 
 ## Boot Akışı
 
@@ -89,10 +89,14 @@ flowchart TD
     F -- Hayır --> H[Boot başarısız veya recovery davranışı]
 ```
 
+BIM page 0'daki user imajı öncelikli arar. Bu yüzden ilk kurulumda yalnızca
+`old-firmware` yüklenirse cihaz eski firmware ile açılır; daha sonra
+`new-firmware` page 0'a yazıldığında BIM yeni imajı seçer.
+
 Beklenen davranış:
 
-- `new-firmware` çalışıyorsa kırmızı LED heartbeat verir.
-- `old-firmware` çalışıyorsa yeşil LED heartbeat verir.
+- İlk kurulumda `old-firmware` çalışıyorsa yeşil LED heartbeat verir.
+- Güncellemeden sonra `new-firmware` çalışıyorsa kırmızı LED heartbeat verir.
 
 ## Kod Dosyaları
 
@@ -100,8 +104,8 @@ Bu bölüm, repodaki dosyaların derleme ve çalışma zamanındaki görevlerini
 
 | Dosya | Görev | Derleme / çalışma etkisi |
 | --- | --- | --- |
-| `new-firmware.c` | Ana user firmware uygulaması. Contiki process başlatır, firmware versiyonunu ve slot bilgisini loglar, kırmızı LED'i periyodik olarak değiştirir. | `new-firmware` hedefi derlenirken uygulama kodu olarak alınır. BIM geçerli user imajı seçerse `0x00000100` entry adresinden çalışır. |
-| `old-firmware.c` | Persistent fallback uygulaması. Fallback slotunun seçildiğini loglar, flash yerleşimini yazar, yeşil LED heartbeat üretir. | `old-firmware` hedefi derlenirken uygulama kodu olarak alınır. User imaj geçersizse BIM bu imaja `0x00030100` adresinden geçer. |
+| `old-firmware.c` | Eski ve ilk yüklenecek persistent fallback uygulaması. Fallback slotunun seçildiğini loglar, flash yerleşimini yazar, yeşil LED heartbeat üretir. | `old-firmware` hedefi derlenirken uygulama kodu olarak alınır. Page 0'da yeni user imaj yoksa BIM bu imaja `0x00030100` adresinden geçer. |
+| `new-firmware.c` | Yeni user/update firmware uygulaması. Contiki process başlatır, firmware versiyonunu ve slot bilgisini loglar, kırmızı LED'i periyodik olarak değiştirir. | `new-firmware` hedefi derlenirken uygulama kodu olarak alınır. Güncelleme olarak page 0'a yazıldığında BIM `0x00000100` entry adresinden çalıştırır. |
 | `oad_hdr.c` | User imaj için `_imgHdr` OAD image header nesnesini tanımlar. | `.image_header` section'ına yerleşir. `imgType = APPSTACKLIB`, `prgEntry = 0x00000100`, `startAddr = 0x00000000` değerlerini üretir. |
 | `oad_hdr_old.c` | Persistent fallback imaj için `_imgHdr` OAD image header nesnesini tanımlar. | `.image_header` section'ına yerleşir. `imgType = PERSISTENT_APP`, `prgEntry = 0x00030100`, `startAddr = 0x00030000` değerlerini üretir. |
 | `oad_image_header.h` | TI OAD header alanları için sabitleri ve packed struct tanımlarını içerir. | Header alanının bellek düzeninin TI BIM'in beklediği sırada oluşmasını sağlar. |
@@ -146,16 +150,16 @@ Contiki-NG `LDSCRIPT` değişkenini global kullandığı için iki imaj ayrı ay
 derlenmelidir. `Makefile` bu yüzden aynı anda hem `old-firmware` hem de
 `new-firmware` hedefinin derlenmesini engeller.
 
-User imaj:
-
-```sh
-make TARGET=simplelink BOARD=sensortag/cc1352r1 LDSCRIPT=new-firmware.ld new-firmware
-```
-
-Persistent fallback imaj:
+Eski/persistent fallback imaj:
 
 ```sh
 make TARGET=simplelink BOARD=sensortag/cc1352r1 LDSCRIPT=old-firmware.ld old-firmware
+```
+
+Yeni/user update imaj:
+
+```sh
+make TARGET=simplelink BOARD=sensortag/cc1352r1 LDSCRIPT=new-firmware.ld new-firmware
 ```
 
 `CONTIKI ?= ../..` değeri, bu klasörün Contiki-NG kaynak ağacına göre
@@ -173,8 +177,8 @@ make TARGET=simplelink BOARD=sensortag/cc1352r1 upload-files
 
 Bu komut sırasıyla şunları yapar:
 
-1. `new-firmware` imajını `new-firmware.ld` ile derler.
-2. `old-firmware` imajını `old-firmware.ld` ile derler.
+1. `old-firmware` imajını `old-firmware.ld` ile derler.
+2. `new-firmware` imajını `new-firmware.ld` ile derler.
 3. Her iki ELF çıktısını `arm-none-eabi-objcopy` ile `.hex` ve `.bin` formatına çevirir.
 4. Dosyaları `upload/` klasörüne koyar.
 
@@ -182,10 +186,10 @@ Bu komut sırasıyla şunları yapar:
 
 | Dosya | İçerik | Yükleme adresi |
 | --- | --- | ---: |
-| `upload/new-firmware.hex` | User firmware, OAD header dahil | Adres HEX içinde gömülü |
-| `upload/new-firmware.bin` | User firmware raw binary | `0x00000000` |
 | `upload/old-firmware.hex` | Persistent fallback firmware, OAD header dahil | Adres HEX içinde gömülü |
 | `upload/old-firmware.bin` | Persistent fallback raw binary | `0x00030000` |
+| `upload/new-firmware.hex` | Yeni user firmware, OAD header dahil | Adres HEX içinde gömülü |
+| `upload/new-firmware.bin` | Yeni user firmware raw binary | `0x00000000` |
 
 `arm-none-eabi-objcopy` PATH içinde değilse komut şu şekilde çalıştırılabilir:
 
@@ -194,7 +198,7 @@ make TARGET=simplelink BOARD=sensortag/cc1352r1 OBJCOPY=/path/to/arm-none-eabi-o
 ```
 
 Yükleme için mümkünse `.hex` dosyaları tercih edilmelidir. HEX formatı adres
-bilgisini taşıdığı için `new-firmware` ve `old-firmware` doğru flash slotlarına
+bilgisini taşıdığı için `old-firmware` ve `new-firmware` doğru flash slotlarına
 yerleşir. `.bin` dosyaları raw çıktıdır; programlama aracında başlangıç adresi
 elle verilmelidir.
 
@@ -205,10 +209,10 @@ Derleme komutu çalıştığında işlem özetle şu sırayla ilerler:
 ```mermaid
 flowchart TD
     A[make komutu] --> B{Hedef hangisi?}
-    B -- new-firmware --> C[PROJECT_SOURCEFILES += oad_hdr.c]
-    B -- old-firmware --> D[PROJECT_SOURCEFILES += oad_hdr_old.c]
-    C --> E[LDSCRIPT = new-firmware.ld]
-    D --> F[LDSCRIPT = old-firmware.ld]
+    B -- old-firmware --> C[PROJECT_SOURCEFILES += oad_hdr_old.c]
+    B -- new-firmware --> D[PROJECT_SOURCEFILES += oad_hdr.c]
+    C --> E[LDSCRIPT = old-firmware.ld]
+    D --> F[LDSCRIPT = new-firmware.ld]
     E --> G[Contiki kaynakları ve uygulama C dosyaları derlenir]
     F --> G
     G --> H[Linker script section adreslerini uygular]
@@ -225,7 +229,7 @@ flowchart TD
 Kısaca:
 
 1. `Makefile`, verilen hedefe bakar.
-2. Hedef `new-firmware` ise `oad_hdr.c`, hedef `old-firmware` ise `oad_hdr_old.c` derlemeye eklenir.
+2. Hedef `old-firmware` ise `oad_hdr_old.c`, hedef `new-firmware` ise `oad_hdr.c` derlemeye eklenir.
 3. `LDSCRIPT` ile seçilen linker script flash başlangıç adreslerini belirler.
 4. C dosyaları object dosyalarına çevrilir.
 5. Link aşamasında `.image_header`, `.resetVecs`, `.text`, `.data`, `.bss`, `.stack` ve DMA alanları doğru adreslere yerleştirilir.
@@ -238,69 +242,160 @@ Kısaca:
 Section adreslerini kontrol etmek için:
 
 ```sh
-arm-none-eabi-readelf -S build/simplelink/sensortag/cc1352r1/new-firmware.simplelink
-arm-none-eabi-readelf -S build/simplelink/sensortag/cc1352r1/old-firmware.simplelink
+arm-none-eabi-readelf -S build/simplelink/sensortag/cc1352r1/simplelink/sensortag/cc1352r1/old-firmware.simplelink
+arm-none-eabi-readelf -S build/simplelink/sensortag/cc1352r1/simplelink/sensortag/cc1352r1/new-firmware.simplelink
 ```
 
 Beklenen:
 
 ```text
-new-firmware: .image_header 0x00000000, .resetVecs 0x00000100
 old-firmware: .image_header 0x00030000, .resetVecs 0x00030100
+new-firmware: .image_header 0x00000000, .resetVecs 0x00000100
 ```
 
 OAD header içeriğini kontrol etmek için:
 
 ```sh
-arm-none-eabi-objdump -s -j .image_header build/simplelink/sensortag/cc1352r1/new-firmware.simplelink
-arm-none-eabi-objdump -s -j .image_header build/simplelink/sensortag/cc1352r1/old-firmware.simplelink
+arm-none-eabi-objdump -s -j .image_header build/simplelink/sensortag/cc1352r1/simplelink/sensortag/cc1352r1/old-firmware.simplelink
+arm-none-eabi-objdump -s -j .image_header build/simplelink/sensortag/cc1352r1/simplelink/sensortag/cc1352r1/new-firmware.simplelink
 ```
 
 Kontrol edilen temel alanlar:
 
 ```text
-new-firmware:
-  magic     = CC13x2R1
-  imgType   = 0x07
-  prgEntry  = 0x00000100
-  startAddr = 0x00000000
-
 old-firmware:
   magic     = CC13x2R1
   imgType   = 0x00
   prgEntry  = 0x00030100
   startAddr = 0x00030000
+
+new-firmware:
+  magic     = CC13x2R1
+  imgType   = 0x07
+  prgEntry  = 0x00000100
+  startAddr = 0x00000000
 ```
 
 ## Cihaza Yükleme
 
 Full chip erase yapılmamalıdır; BIM/CCFG bölgesi korunmalıdır.
 
+TI UniFlash indirme sayfası:
+
+```text
+https://www.ti.com/tool/UNIFLASH
+```
+
 Yükleme için gereken dosyalar:
 
 | Dosya | Kaynak | Not |
 | --- | --- | --- |
 | `../bim_onchip/Debug_unsecure/bim_onchip.hex` | TI BIM projesi | BIM ve CCFG alanını içerir. |
-| `upload/new-firmware.hex` | Bu projenin `upload-files` hedefi | Ana user firmware imajıdır. |
-| `upload/old-firmware.hex` | Bu projenin `upload-files` hedefi | Persistent fallback firmware imajıdır. |
+| `upload/old-firmware.hex` | Bu projenin `upload-files` hedefi | Eski ve ilk çalıştırılacak persistent fallback firmware imajıdır. |
+| `upload/new-firmware.hex` | Bu projenin `upload-files` hedefi | Yeni user/update firmware imajıdır. |
 
-Yükleme sırası:
+Yükleme senaryosu:
 
 ```text
 1. BIM             -> 0x00056000 - 0x00057FFF
-2. new-firmware    -> 0x00000000 - 0x0002FFFF
-3. old-firmware    -> 0x00030000 - 0x00051FFF
+2. old-firmware    -> 0x00030000 - 0x00051FFF
+3. Reset           -> old-firmware çalışır
+4. new-firmware    -> 0x00000000 - 0x0002FFFF
+5. Reset           -> new-firmware çalışır
 ```
 
 BIN dosyasıyla yükleme yapılacaksa adresler ayrıca verilmelidir:
 
 ```text
-upload/new-firmware.bin -> 0x00000000
 upload/old-firmware.bin -> 0x00030000
+upload/new-firmware.bin -> 0x00000000
 ```
 
 HEX dosyalarıyla yükleme yapılırsa adresler dosyanın içinde bulunduğu için
 programlama aracında ek başlangıç adresi verilmesi gerekmez.
+
+### UniFlash ile Adım Adım
+
+1. Önce yükleme dosyalarını üret:
+
+```sh
+make TARGET=simplelink BOARD=sensortag/cc1352r1 upload-files
+```
+
+2. Kartı USB/debugger üzerinden bilgisayara bağla.
+
+3. UniFlash'i aç ve yeni oturumda cihaz olarak `CC1352R1F3` seç. Bağlantı
+   arayüzü olarak kart üzerindeki debugger görünüyorsa `XDS110` seçilebilir.
+
+4. Erase ayarlarında `Mass Erase`, `Erase Entire Flash` veya benzeri tüm flash'ı
+   silen seçenekleri kullanma. Amaç sadece yüklenecek HEX dosyasının kapsadığı
+   sektörleri yazmak ve BIM/CCFG alanını yanlışlıkla silmemektir.
+
+5. İlk olarak BIM dosyasını yükle:
+
+```text
+../bim_onchip/Debug_unsecure/bim_onchip.hex
+```
+
+Bu dosya BIM'i `0x00056000` bölgesine, CCFG bilgisini de flash'ın son kısmına
+yerleştirir. Bu adım boot zincirinin başlangıcıdır; cihaz reset sonrası önce
+BIM'e girer.
+
+6. İkinci olarak eski firmware dosyasını yükle:
+
+```text
+upload/old-firmware.hex
+```
+
+Bu dosya `0x00030000` adresindeki persistent fallback slotuna yazılır. Page 0'da
+henüz yeni user imaj olmadığı için BIM fallback imajı seçip `0x00030100` entry
+adresine atlar.
+
+7. Cihazı resetle ve eski firmware'in çalıştığını kontrol et:
+
+```text
+old-firmware çalışırsa yeşil LED heartbeat
+```
+
+8. Güncelleme aşamasında yeni firmware dosyasını yükle:
+
+```text
+upload/new-firmware.hex
+```
+
+Bu dosya `0x00000000` adresindeki user image slotuna yazılır. BIM reset sonrası
+önce bu imajı arar ve geçerli görürse `0x00000100` entry adresine atlar.
+
+9. Programlama bittikten sonra cihazı tekrar resetle. Beklenen davranış:
+
+```text
+new-firmware çalışırsa kırmızı LED heartbeat
+```
+
+Önerilen UniFlash sırası kısaca şöyledir:
+
+```text
+1. bim_onchip.hex
+2. upload/old-firmware.hex
+3. Reset -> old-firmware
+4. upload/new-firmware.hex
+5. Reset -> new-firmware
+```
+
+İstersen üç HEX dosyasını tek oturumda art arda da yazabilirsin. Bu durumda
+reset sonrası doğrudan `new-firmware` çalışır; `old-firmware` fallback olarak
+flash'ta kalır.
+
+HEX yerine BIN kullanılacaksa UniFlash'te her BIN dosyası için başlangıç adresi
+elle verilmelidir:
+
+```text
+upload/old-firmware.bin -> 0x00030000
+upload/new-firmware.bin -> 0x00000000
+```
+
+Bu projede `.hex` kullanmak daha güvenlidir; çünkü adres bilgisi dosyanın içinde
+taşınır ve yanlış başlangıç adresi girme riski azalır.
 
 ## CCFG Notu
 
@@ -317,10 +412,15 @@ kullanılmalıdır.
 
 ## İkinci Firmware Stratejisi
 
-Mevcut BIM değiştirilmediği için ikinci imaj için ayrı bir flash slotu kullanılır.
-Bu çalışmada `0x00030000 - 0x00051FFF` aralığı persistent fallback imaj için
-ayrılmıştır. Böylece page 0'daki user imaj çalışmazsa BIM bu fallback imaja
-geçebilir.
+Mevcut BIM değiştirilmediği için eski ve yeni firmware iki ayrı slotta tutulur.
+İlk yüklenecek eski imaj olan `old-firmware`, `0x00030000 - 0x00051FFF`
+aralığındaki persistent fallback slotuna yazılır. Bu sayede page 0 henüz boşken
+cihaz eski firmware ile açılabilir.
+
+Güncelleme aşamasında `new-firmware`, page 0'daki `0x00000000 - 0x0002FFFF`
+user image slotuna yazılır. BIM reset sonrası önce page 0'ı kontrol ettiği için
+yeni imaj geçerliyse artık `new-firmware` çalışır; `old-firmware` ise fallback
+olarak flash'ta kalır.
 
 Tam firmware değiştirme veya staging alanındaki imajı aktif alana kopyalama gibi
 işlemler için ek bootloader/recovery mantığı gerekir. Bu çalışmada yeni bootloader
@@ -333,8 +433,8 @@ cevaplarıdır.
 
 | Soru | Cevap |
 | --- | --- |
-| Uygulamanın çalışan ana imajı nereye yerleşecek? | Mevcut BIM önce page 0'da user image aradığı için `new-firmware` `0x00000000` adresine yerleşir. Entry adresi `0x00000100` olur. |
-| Diske/flash'a kaydedilecek ikinci imaj hangi alana yazılacak? | Bu çalışmada ikinci imaj için internal flash'ta `0x00030000 - 0x00051FFF` aralığı ayrıldı. Burada `old-firmware` persistent fallback imajı tutulur. |
+| Uygulamanın ilk çalışan eski imajı nereye yerleşecek? | İlk yüklenecek `old-firmware`, persistent fallback slotu olan `0x00030000 - 0x00051FFF` aralığına yerleşir. Entry adresi `0x00030100` olur. |
+| Güncelleme olarak yüklenecek yeni imaj hangi alana yazılacak? | `new-firmware`, BIM'in öncelikli baktığı page 0 user image slotuna yazılır: `0x00000000 - 0x0002FFFF`. Entry adresi `0x00000100` olur. |
 | Aynı anda iki tam imaj saklanabiliyor mu? | Bu örnek imajlar küçük olduğu için evet. TI on-chip OAD dokümanı ise bunun flash yerleşimine ve user uygulamanın yeterince küçük olmasına bağlı olduğunu belirtir. |
 | Sadece staging alanı varsa aktivasyon nasıl yapılır? | Staging imajı doğrudan seçilmeyecekse BIM/bootloader/recovery kodu tarafından doğrulanıp aktif alana kopyalanmalı veya OAD header üzerinden seçilebilir hale getirilmelidir. Bu projede mevcut BIM'e uyumlu iki seçilebilir slot kullanıldı. |
 | Flash erase/write işlemleri mevcut çalışan imajı nasıl etkiler? | Flash silme işlemi sektör bazlıdır. Çalışan imajın veya BIM/CCFG alanının bulunduğu sektör silinirse cihaz boot edemeyebilir. Bu yüzden full chip erase yerine bölge bazlı programlama kullanılır. |
@@ -363,6 +463,7 @@ akışı için bu alanlar TI OAD Image Tool ile doldurulmalıdır.
 
 - TI CC1352R ürün sayfası: https://www.ti.com/product/CC1352R
 - TI CC1352R datasheet: https://www.ti.com/lit/ds/symlink/cc1352r.pdf
+- TI UniFlash indirme sayfası: https://www.ti.com/tool/UNIFLASH
 - TI güncel BIM dokümanı: https://software-dl.ti.com/simplelink/esd/simplelink_cc13xx_cc26xx_sdk/latest/exports/docs/ble5stack/ble_user_guide/html/oad-secure/bim.html
 - TI güncel OAD image header dokümanı: https://software-dl.ti.com/simplelink/esd/simplelink_cc13xx_cc26xx_sdk/latest/exports/docs/ble5stack/ble_user_guide/doxygen/oad/html/group___o_a_d___i_m_a_g_e___h_e_a_d_e_r.html
 - TI SimpleLink CC13xx/CC26xx SDK OAD girişi: https://software-dl.ti.com/simplelink/esd/simplelink_cc13xx_cc26xx_sdk/8.32.00.07/exports/docs/dmm/dmm_user_guide/html/oad-secure/intro.html

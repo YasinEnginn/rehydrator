@@ -32,12 +32,13 @@ MKDIR_P ?= mkdir -p
 UPLOAD_DIR ?= upload
 
 BUILD_DIR = build/$(TARGET)/$(BOARD)
-NEW_FIRMWARE_ELF = $(BUILD_DIR)/new-firmware.$(TARGET)
-OLD_FIRMWARE_ELF = $(BUILD_DIR)/old-firmware.$(TARGET)
+PROJECT_BUILD_DIR = $(BUILD_DIR)/$(TARGET)/$(BOARD)
+NEW_FIRMWARE_ELF = $(PROJECT_BUILD_DIR)/new-firmware.$(TARGET)
+OLD_FIRMWARE_ELF = $(PROJECT_BUILD_DIR)/old-firmware.$(TARGET)
 
 .PHONY: upload-files new-firmware-upload-files old-firmware-upload-files
 
-upload-files: new-firmware-upload-files old-firmware-upload-files
+upload-files: old-firmware-upload-files new-firmware-upload-files
 
 new-firmware-upload-files:
 	$(MAKE) TARGET=$(TARGET) BOARD=$(BOARD) LDSCRIPT=new-firmware.ld new-firmware
