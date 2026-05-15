@@ -187,6 +187,14 @@ klasörlere koyabilir. Bu yüzden `Makefile`, ELF yolunu sabit varsaymaz; derlem
 sonrası ilgili `old-firmware.simplelink` ve `new-firmware.simplelink` dosyalarını
 `find` ile bulur.
 
+Eğer daha önce hatalı build denemesiyle `build/simplelink/.../simplelink/...`
+gibi tekrar eden klasörler oluştuysa temizleyip yeniden üretmek en sağlıklısıdır:
+
+```sh
+rm -rf build upload
+make TARGET=simplelink BOARD=sensortag/cc1352r1 upload-files
+```
+
 Üretilen firmware dosyaları:
 
 | Dosya | İçerik | Yükleme adresi |

@@ -31,7 +31,7 @@ OBJCOPY ?= arm-none-eabi-objcopy
 MKDIR_P ?= mkdir -p
 UPLOAD_DIR ?= upload
 
-BUILD_DIR = build/$(TARGET)/$(BOARD)
+UPLOAD_BUILD_ROOT = build/$(TARGET)/$(BOARD)
 
 .PHONY: upload-files new-firmware-upload-files old-firmware-upload-files
 
@@ -40,9 +40,9 @@ upload-files: old-firmware-upload-files new-firmware-upload-files
 new-firmware-upload-files:
 	$(MAKE) TARGET=$(TARGET) BOARD=$(BOARD) LDSCRIPT=new-firmware.ld new-firmware
 	$(MKDIR_P) $(UPLOAD_DIR)
-	@elf="$$(find "$(BUILD_DIR)" -type f -name "new-firmware.$(TARGET)" | head -n 1)"; \
+	@elf="$$(find "$(UPLOAD_BUILD_ROOT)" -type f -name "new-firmware.$(TARGET)" | head -n 1)"; \
 	if [ -z "$$elf" ]; then \
-	  echo "Could not find new-firmware.$(TARGET) under $(BUILD_DIR)"; \
+	  echo "Could not find new-firmware.$(TARGET) under $(UPLOAD_BUILD_ROOT)"; \
 	  exit 1; \
 	fi; \
 	echo "Using $$elf"; \
@@ -53,9 +53,9 @@ new-firmware-upload-files:
 old-firmware-upload-files:
 	$(MAKE) TARGET=$(TARGET) BOARD=$(BOARD) LDSCRIPT=old-firmware.ld old-firmware
 	$(MKDIR_P) $(UPLOAD_DIR)
-	@elf="$$(find "$(BUILD_DIR)" -type f -name "old-firmware.$(TARGET)" | head -n 1)"; \
+	@elf="$$(find "$(UPLOAD_BUILD_ROOT)" -type f -name "old-firmware.$(TARGET)" | head -n 1)"; \
 	if [ -z "$$elf" ]; then \
-	  echo "Could not find old-firmware.$(TARGET) under $(BUILD_DIR)"; \
+	  echo "Could not find old-firmware.$(TARGET) under $(UPLOAD_BUILD_ROOT)"; \
 	  exit 1; \
 	fi; \
 	echo "Using $$elf"; \
