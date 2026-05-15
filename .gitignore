@@ -1,1 +1,30 @@
+# Python
 __pycache__/
+*.pyc
+
+# Contiki-NG / build outputs
+build/
+upload/
+*.elf
+*.out
+*.hex
+*.bin
+*.map
+*.lst
+*.o
+*.d
+
+# CCS / Eclipse generated files
+Debug/
+Release/
+.settings/
+.metadata/
+
+# Editor files
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# Logs
+*.log

@@ -21,6 +21,12 @@
 
 </div>
 
+**Rehydrator** *(ri-HAY-drey-tir)* adi, reset veya yeniden baslatma sonrasinda
+bir dugumun kalici state/rol konfigurasyonunu flash'tan okuyup sistemi yeniden
+ayaga kaldirmasi fikrinden gelir. Bu projede de firmware imajlari, mevcut BIM
+akisi ve flash yerlesimi korunarak cihazin dogru imajdan guvenilir bicimde
+baslamasi hedeflenir.
+
 Bu depo, ödevin yalnızca **3. CC1352R Gerçekleme ve Donanım Uyarlama**
 kısmı için hazırlanmıştır. Amaç, Contiki-NG ile derlenen iki firmware imajını
 CC1352R flash yerleşimine uyarlamak ve mevcut TI BIM/OAD akışıyla çalışabilecek
@@ -174,6 +180,8 @@ projede bunun için `Makefile` içine `upload-files` hedefi eklendi.
 ```sh
 make TARGET=simplelink BOARD=sensortag/cc1352r1 upload-files
 ```
+
+> Not: `upload/` klasoru build sirasinda uretilen demo artifact'leri icindir ve git tarafinda ignore edilir. Teslim/release icin `.hex` ve `.bin` dosyalari GitHub Release eki olarak, yanlarina `sha256sums.txt` eklenerek paylasilmalidir.
 
 Bu komut sırasıyla şunları yapar:
 
