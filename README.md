@@ -23,8 +23,8 @@
 
 Bu depo, ödevin yalnızca **3. CC1352R Gerçekleme ve Donanım Uyarlama**
 kısmı için hazırlanmıştır. Amaç, Contiki-NG ile derlenen iki firmware imajını
-CC1352R flash yerleşimine uyarlamak ve mevcut TI BIM/OAD akışıyla
-çalışabilecek şekilde doğrulamaktır.
+CC1352R flash yerleşimine uyarlamak ve mevcut TI BIM/OAD akışıyla çalışabilecek
+şekilde doğrulamaktır.
 
 Bu çalışmada BIM dosyası değiştirilmez. Firmware tarafındaki linker script,
 OAD header ve flash adresleri mevcut BIM'in arama sırasına göre düzenlenir.
@@ -37,7 +37,7 @@ Yapılanlar:
 - `old-firmware`, persistent fallback imaj olarak `0x00030000` slotuna yerleştirildi.
 - Her iki imaj için TI OAD uyumlu image header eklendi.
 - Linker scriptlerde OAD header, reset vector, DMA, stack ve RAM bölgeleri düzenlendi.
-- ELF section ve OAD header içerikleri `readelf` / `objdump` ile doğrulandı.
+- ELF section ve OAD header içerikleri `readelf` / `objdump` ile doğrulanabilir hale getirildi.
 
 Kapsam dışı:
 
@@ -61,7 +61,7 @@ Flash içindeki firmware yerleşimi:
 | Alan | Başlangıç | Bitiş | Görev |
 | --- | ---: | ---: | --- |
 | User image | `0x00000000` | `0x0002FFFF` | BIM'in ilk aradığı `APPSTACKLIB` imaj |
-| Persistent fallback | `0x00030000` | `0x00051FFF` | User imaj yoksa/geçersizse fallback |
+| Persistent fallback | `0x00030000` | `0x00051FFF` | User imaj yoksa veya geçersizse fallback |
 | Metadata | `0x00052000` | `0x00053FFF` | Ayrılmış alan |
 | Recovery | `0x00054000` | `0x00055FFF` | Ayrılmış alan |
 | BIM + CCFG | `0x00056000` | `0x00057FFF` | Mevcut TI BIM ve CCFG |
@@ -78,13 +78,15 @@ Reset vector tablosu header alanından sonra başlar.
 
 Mevcut BIM şu sırayla imaj arar:
 
-```text
-Reset
-  -> ROM/CCFG ayarları BIM bölgesine yönlendirir
-  -> BIM page 0'da APPSTACKLIB user imajı arar
-  -> Geçerli user imaj varsa 0x00000100 adresine atlar
-  -> User imaj yoksa/geçersizse PERSISTENT_APP fallback imajı arar
-  -> Fallback imaj geçerse 0x00030100 adresine atlar
+```mermaid
+flowchart TD
+    A[Reset] --> B[ROM ve CCFG boot ayarları]
+    B --> C[BIM bölgesi: 0x00056000]
+    C --> D{Page 0'da geçerli APPSTACKLIB var mı?}
+    D -- Evet --> E[new-firmware entry: 0x00000100]
+    D -- Hayır --> F{Persistent fallback geçerli mi?}
+    F -- Evet --> G[old-firmware entry: 0x00030100]
+    F -- Hayır --> H[Boot başarısız veya recovery davranışı]
 ```
 
 Beklenen davranış:
@@ -92,74 +94,57 @@ Beklenen davranış:
 - `new-firmware` çalışıyorsa kırmızı LED heartbeat verir.
 - `old-firmware` çalışıyorsa yeşil LED heartbeat verir.
 
-## Sorular ve Cevaplar
+## Kod Dosyaları
 
-Bu bölüm, ödevde istenen soruların güncel TI/Contiki kaynaklarına göre kısa
-cevaplarıdır.
+Bu bölüm, repodaki dosyaların derleme ve çalışma zamanındaki görevlerini özetler.
 
-| Soru | Cevap |
-| --- | --- |
-| Uygulamanın çalışan ana imajı nereye yerleşecek? | Mevcut BIM önce page 0'da user image aradığı için `new-firmware` `0x00000000` adresine yerleşir. Entry adresi `0x00000100` olur. |
-| Diske/flash'a kaydedilecek ikinci imaj hangi alana yazılacak? | Bu çalışmada ikinci imaj için internal flash'ta `0x00030000 - 0x00051FFF` aralığı ayrıldı. Burada `old-firmware` persistent fallback imajı tutulur. |
-| Aynı anda iki tam imaj saklanabiliyor mu? | Bu örnek imajlar küçük olduğu için evet. TI on-chip OAD dokümanı ise bunun flash yerleşimine ve user uygulamanın yeterince küçük olmasına bağlı olduğunu belirtir. |
-| Sadece staging alanı varsa aktivasyon nasıl yapılır? | Staging imajı doğrudan seçilmeyecekse BIM/bootloader/recovery kodu tarafından doğrulanıp aktif alana kopyalanmalı veya OAD header üzerinden seçilebilir hale getirilmelidir. Bu projede mevcut BIM'e uyumlu iki seçilebilir slot kullanıldı. |
-| Flash erase/write işlemleri mevcut çalışan imajı nasıl etkiler? | Flash silme işlemi sektör bazlıdır. Çalışan imajın veya BIM/CCFG alanının bulunduğu sektör silinirse cihaz boot edemeyebilir. Bu yüzden full chip erase yerine bölge bazlı programlama kullanılır. |
+| Dosya | Görev | Derleme / çalışma etkisi |
+| --- | --- | --- |
+| `new-firmware.c` | Ana user firmware uygulaması. Contiki process başlatır, firmware versiyonunu ve slot bilgisini loglar, kırmızı LED'i periyodik olarak değiştirir. | `new-firmware` hedefi derlenirken uygulama kodu olarak alınır. BIM geçerli user imajı seçerse `0x00000100` entry adresinden çalışır. |
+| `old-firmware.c` | Persistent fallback uygulaması. Fallback slotunun seçildiğini loglar, flash yerleşimini yazar, yeşil LED heartbeat üretir. | `old-firmware` hedefi derlenirken uygulama kodu olarak alınır. User imaj geçersizse BIM bu imaja `0x00030100` adresinden geçer. |
+| `oad_hdr.c` | User imaj için `_imgHdr` OAD image header nesnesini tanımlar. | `.image_header` section'ına yerleşir. `imgType = APPSTACKLIB`, `prgEntry = 0x00000100`, `startAddr = 0x00000000` değerlerini üretir. |
+| `oad_hdr_old.c` | Persistent fallback imaj için `_imgHdr` OAD image header nesnesini tanımlar. | `.image_header` section'ına yerleşir. `imgType = PERSISTENT_APP`, `prgEntry = 0x00030100`, `startAddr = 0x00030000` değerlerini üretir. |
+| `oad_image_header.h` | TI OAD header alanları için sabitleri ve packed struct tanımlarını içerir. | Header alanının bellek düzeninin TI BIM'in beklediği sırada oluşmasını sağlar. |
+| `oad_layout.h` | Flash slot adresleri, header boyutu, entry adresleri ve firmware versiyonlarını merkezi olarak tanımlar. | Hem uygulama logları hem de OAD header kaynakları aynı adresleri kullanır; adres tutarsızlığını önler. |
+| `new-firmware.ld` | User imaj linker scriptidir. | Header'ı `0x00000000`, reset vector'ı `0x00000100` adresine yerleştirir. `.ccfg` section'ını discard ederek BIM/CCFG alanını korur. |
+| `old-firmware.ld` | Persistent fallback linker scriptidir. | Header'ı `0x00030000`, reset vector'ı `0x00030100` adresine yerleştirir. |
+| `Makefile` | Contiki-NG derleme kurallarını, hedef seçimini ve yükleme dosyası üretimini yönetir. | Aynı anda iki imaj derlenmesini engeller; hedefe göre doğru OAD header dosyasını ekler, `upload-files` ile `.hex` / `.bin` üretir. |
+| `project-conf.h` | Proje seviyesinde Contiki ayarları içerir. | Log seviyesini ayarlar. |
+| `LICENSE` | Lisans bilgisidir. | Kaynak kodun kullanım koşullarını belirtir. |
 
-## Beklenen Çıktılar
+## Dosyalar Arası İlişki
 
-Ödevin 3. kısmı için beklenen teknik çıktılar bu repoda şu şekilde karşılanır:
+```mermaid
+flowchart LR
+    Layout[oad_layout.h<br/>Adresler ve versiyonlar]
+    HeaderDef[oad_image_header.h<br/>TI OAD struct/sabitler]
 
-| Beklenen çıktı | Repodaki karşılığı |
-| --- | --- |
-| Flash ve RAM kullanımını gösteren bellek tablosu | `Bellek Yerleşimi` bölümü ve `oad_layout.h` |
-| Boot zincirini gösteren kısa akış diyagramı | `Boot Akışı` bölümü |
-| CCFG alanının neden kritik olduğu | `CCFG Notu` bölümü |
-| İkinci firmware kaydı için yerleşim stratejisi | `İkinci Firmware Stratejisi` bölümü |
-| Tam firmware değiştirme için neden bootloader gerektiği | Staging/aktivasyon açıklaması ve mevcut BIM/OAD seçimi |
-| ELF/section doğrulaması | `readelf` ve `objdump` komutlarıyla `.image_header`, `.resetVecs`, OAD header alanları |
+    Layout --> NewApp[new-firmware.c]
+    Layout --> OldApp[old-firmware.c]
+    Layout --> NewHdr[oad_hdr.c]
+    Layout --> OldHdr[oad_hdr_old.c]
 
-## CCFG Notu
+    HeaderDef --> NewHdr
+    HeaderDef --> OldHdr
 
-CCFG, reset sonrası cihaz davranışını ve boot zincirini etkileyen kritik flash
-alanıdır. Bu projede BIM + CCFG bölgesi son sektörde tutulur:
+    Makefile[Makefile<br/>Hedef seçimi] --> NewApp
+    Makefile --> OldApp
+    Makefile --> NewHdr
+    Makefile --> OldHdr
 
-```text
-0x00056000 - 0x00057FFF
+    NewLd[new-firmware.ld] --> NewElf[new-firmware ELF]
+    OldLd[old-firmware.ld] --> OldElf[old-firmware ELF]
+    NewApp --> NewElf
+    NewHdr --> NewElf
+    OldApp --> OldElf
+    OldHdr --> OldElf
 ```
-
-Bu bölge yanlışlıkla silinirse cihaz beklenen BIM akışına giremeyebilir.
-Bu yüzden yükleme yaparken full chip erase yerine bölge bazlı programlama
-kullanılmalıdır.
-
-## İkinci Firmware Stratejisi
-
-Mevcut BIM değiştirilmediği için ikinci imaj için ayrı bir flash slotu
-kullanılır. Bu çalışmada `0x00030000 - 0x00051FFF` aralığı persistent fallback
-imaj için ayrılmıştır. Böylece page 0'daki user imaj çalışmazsa BIM bu
-fallback imaja geçebilir.
-
-Tam firmware değiştirme veya staging alanındaki imajı aktif alana kopyalama
-gibi işlemler için ek bootloader/recovery mantığı gerekir. Bu çalışmada yeni
-bootloader yazılmamış, mevcut TI BIM/OAD modeli kullanılmıştır.
-
-## Proje Dosyaları
-
-| Dosya | Görev |
-| --- | --- |
-| `new-firmware.c` | User firmware uygulaması |
-| `old-firmware.c` | Persistent fallback uygulaması |
-| `oad_hdr.c` | User imaj için OAD header |
-| `oad_hdr_old.c` | Persistent fallback imaj için OAD header |
-| `oad_image_header.h` | Gerekli TI OAD header sabitleri ve struct tanımları |
-| `oad_layout.h` | Flash adresleri ve firmware versiyonları |
-| `new-firmware.ld` | User imajı page 0'a linkler |
-| `old-firmware.ld` | Persistent fallback imajı `0x00030000` slotuna linkler |
-| `Makefile` | Contiki build kuralları |
 
 ## Derleme
 
-Contiki-NG `LDSCRIPT` değişkenini global kullandığı için iki imaj ayrı
-derlenmelidir.
+Contiki-NG `LDSCRIPT` değişkenini global kullandığı için iki imaj ayrı ayrı
+derlenmelidir. `Makefile` bu yüzden aynı anda hem `old-firmware` hem de
+`new-firmware` hedefinin derlenmesini engeller.
 
 User imaj:
 
@@ -172,6 +157,81 @@ Persistent fallback imaj:
 ```sh
 make TARGET=simplelink BOARD=sensortag/cc1352r1 LDSCRIPT=old-firmware.ld old-firmware
 ```
+
+`CONTIKI ?= ../..` değeri, bu klasörün Contiki-NG kaynak ağacına göre
+konumlandırıldığını varsayar. Proje farklı bir yerdeyse derleme sırasında
+`CONTIKI=/path/to/contiki-ng` verilebilir.
+
+## Yükleme Dosyalarının Üretimi
+
+Cihaza yazmak için ELF çıktısından `.hex` veya `.bin` dosyası üretilir. Bu
+projede bunun için `Makefile` içine `upload-files` hedefi eklendi.
+
+```sh
+make TARGET=simplelink BOARD=sensortag/cc1352r1 upload-files
+```
+
+Bu komut sırasıyla şunları yapar:
+
+1. `new-firmware` imajını `new-firmware.ld` ile derler.
+2. `old-firmware` imajını `old-firmware.ld` ile derler.
+3. Her iki ELF çıktısını `arm-none-eabi-objcopy` ile `.hex` ve `.bin` formatına çevirir.
+4. Dosyaları `upload/` klasörüne koyar.
+
+Üretilen firmware dosyaları:
+
+| Dosya | İçerik | Yükleme adresi |
+| --- | --- | ---: |
+| `upload/new-firmware.hex` | User firmware, OAD header dahil | Adres HEX içinde gömülü |
+| `upload/new-firmware.bin` | User firmware raw binary | `0x00000000` |
+| `upload/old-firmware.hex` | Persistent fallback firmware, OAD header dahil | Adres HEX içinde gömülü |
+| `upload/old-firmware.bin` | Persistent fallback raw binary | `0x00030000` |
+
+`arm-none-eabi-objcopy` PATH içinde değilse komut şu şekilde çalıştırılabilir:
+
+```sh
+make TARGET=simplelink BOARD=sensortag/cc1352r1 OBJCOPY=/path/to/arm-none-eabi-objcopy upload-files
+```
+
+Yükleme için mümkünse `.hex` dosyaları tercih edilmelidir. HEX formatı adres
+bilgisini taşıdığı için `new-firmware` ve `old-firmware` doğru flash slotlarına
+yerleşir. `.bin` dosyaları raw çıktıdır; programlama aracında başlangıç adresi
+elle verilmelidir.
+
+## Derleme Akışı
+
+Derleme komutu çalıştığında işlem özetle şu sırayla ilerler:
+
+```mermaid
+flowchart TD
+    A[make komutu] --> B{Hedef hangisi?}
+    B -- new-firmware --> C[PROJECT_SOURCEFILES += oad_hdr.c]
+    B -- old-firmware --> D[PROJECT_SOURCEFILES += oad_hdr_old.c]
+    C --> E[LDSCRIPT = new-firmware.ld]
+    D --> F[LDSCRIPT = old-firmware.ld]
+    E --> G[Contiki kaynakları ve uygulama C dosyaları derlenir]
+    F --> G
+    G --> H[Linker script section adreslerini uygular]
+    H --> I[.image_header slot başına yazılır]
+    H --> J[.resetVecs entry adresine yazılır]
+    I --> K[ELF firmware çıktısı oluşur]
+    J --> K
+    K --> L{upload-files hedefi çalıştı mı?}
+    L -- Hayır --> M[readelf / objdump ile section ve header doğrulanır]
+    L -- Evet --> N[objcopy ile .hex ve .bin üretilir]
+    N --> M
+```
+
+Kısaca:
+
+1. `Makefile`, verilen hedefe bakar.
+2. Hedef `new-firmware` ise `oad_hdr.c`, hedef `old-firmware` ise `oad_hdr_old.c` derlemeye eklenir.
+3. `LDSCRIPT` ile seçilen linker script flash başlangıç adreslerini belirler.
+4. C dosyaları object dosyalarına çevrilir.
+5. Link aşamasında `.image_header`, `.resetVecs`, `.text`, `.data`, `.bss`, `.stack` ve DMA alanları doğru adreslere yerleştirilir.
+6. Çıkan ELF dosyası `readelf` ve `objdump` ile kontrol edilir.
+7. `upload-files` hedefi kullanıldıysa ELF dosyalarından `.hex` ve `.bin` yükleme çıktıları üretilir.
+8. Programlama yapılırken sadece ilgili flash slotları yazılır; BIM/CCFG alanı korunur.
 
 ## Doğrulama
 
@@ -216,6 +276,14 @@ old-firmware:
 
 Full chip erase yapılmamalıdır; BIM/CCFG bölgesi korunmalıdır.
 
+Yükleme için gereken dosyalar:
+
+| Dosya | Kaynak | Not |
+| --- | --- | --- |
+| `../bim_onchip/Debug_unsecure/bim_onchip.hex` | TI BIM projesi | BIM ve CCFG alanını içerir. |
+| `upload/new-firmware.hex` | Bu projenin `upload-files` hedefi | Ana user firmware imajıdır. |
+| `upload/old-firmware.hex` | Bu projenin `upload-files` hedefi | Persistent fallback firmware imajıdır. |
+
 Yükleme sırası:
 
 ```text
@@ -224,11 +292,72 @@ Yükleme sırası:
 3. old-firmware    -> 0x00030000 - 0x00051FFF
 ```
 
+BIN dosyasıyla yükleme yapılacaksa adresler ayrıca verilmelidir:
+
+```text
+upload/new-firmware.bin -> 0x00000000
+upload/old-firmware.bin -> 0x00030000
+```
+
+HEX dosyalarıyla yükleme yapılırsa adresler dosyanın içinde bulunduğu için
+programlama aracında ek başlangıç adresi verilmesi gerekmez.
+
+## CCFG Notu
+
+CCFG, reset sonrası cihaz davranışını ve boot zincirini etkileyen kritik flash
+alanıdır. Bu projede BIM + CCFG bölgesi son sektörde tutulur:
+
+```text
+0x00056000 - 0x00057FFF
+```
+
+Bu bölge yanlışlıkla silinirse cihaz beklenen BIM akışına giremeyebilir.
+Bu yüzden yükleme yaparken full chip erase yerine bölge bazlı programlama
+kullanılmalıdır.
+
+## İkinci Firmware Stratejisi
+
+Mevcut BIM değiştirilmediği için ikinci imaj için ayrı bir flash slotu kullanılır.
+Bu çalışmada `0x00030000 - 0x00051FFF` aralığı persistent fallback imaj için
+ayrılmıştır. Böylece page 0'daki user imaj çalışmazsa BIM bu fallback imaja
+geçebilir.
+
+Tam firmware değiştirme veya staging alanındaki imajı aktif alana kopyalama gibi
+işlemler için ek bootloader/recovery mantığı gerekir. Bu çalışmada yeni bootloader
+yazılmamış, mevcut TI BIM/OAD modeli kullanılmıştır.
+
+## Sorular ve Cevaplar
+
+Bu bölüm, ödevde istenen soruların güncel TI/Contiki kaynaklarına göre kısa
+cevaplarıdır.
+
+| Soru | Cevap |
+| --- | --- |
+| Uygulamanın çalışan ana imajı nereye yerleşecek? | Mevcut BIM önce page 0'da user image aradığı için `new-firmware` `0x00000000` adresine yerleşir. Entry adresi `0x00000100` olur. |
+| Diske/flash'a kaydedilecek ikinci imaj hangi alana yazılacak? | Bu çalışmada ikinci imaj için internal flash'ta `0x00030000 - 0x00051FFF` aralığı ayrıldı. Burada `old-firmware` persistent fallback imajı tutulur. |
+| Aynı anda iki tam imaj saklanabiliyor mu? | Bu örnek imajlar küçük olduğu için evet. TI on-chip OAD dokümanı ise bunun flash yerleşimine ve user uygulamanın yeterince küçük olmasına bağlı olduğunu belirtir. |
+| Sadece staging alanı varsa aktivasyon nasıl yapılır? | Staging imajı doğrudan seçilmeyecekse BIM/bootloader/recovery kodu tarafından doğrulanıp aktif alana kopyalanmalı veya OAD header üzerinden seçilebilir hale getirilmelidir. Bu projede mevcut BIM'e uyumlu iki seçilebilir slot kullanıldı. |
+| Flash erase/write işlemleri mevcut çalışan imajı nasıl etkiler? | Flash silme işlemi sektör bazlıdır. Çalışan imajın veya BIM/CCFG alanının bulunduğu sektör silinirse cihaz boot edemeyebilir. Bu yüzden full chip erase yerine bölge bazlı programlama kullanılır. |
+
+## Beklenen Çıktılar
+
+Ödevin 3. kısmı için beklenen teknik çıktılar bu repoda şu şekilde karşılanır:
+
+| Beklenen çıktı | Repodaki karşılığı |
+| --- | --- |
+| Flash ve RAM kullanımını gösteren bellek tablosu | `Bellek Yerleşimi` bölümü ve `oad_layout.h` |
+| Boot zincirini gösteren kısa akış diyagramı | `Boot Akışı` bölümü |
+| CCFG alanının neden kritik olduğu | `CCFG Notu` bölümü |
+| İkinci firmware kaydı için yerleşim stratejisi | `İkinci Firmware Stratejisi` bölümü |
+| Tam firmware değiştirme için neden bootloader gerektiği | Staging/aktivasyon açıklaması ve mevcut BIM/OAD seçimi |
+| ELF/section doğrulaması | `readelf` ve `objdump` komutlarıyla `.image_header`, `.resetVecs`, OAD header alanları |
+| Cihaza yüklenecek dosyaların üretimi | `make ... upload-files` hedefiyle `upload/*.hex` ve `upload/*.bin` dosyaları |
+
 ## Not
 
-Debug BIM denemesinde OAD header içindeki `crc32`, `len`, `imgEndAddr` ve
-segment length alanlarının `0xFFFFFFFF` kalması kabul edilebilir. Release veya
-secure OAD akışı için bu alanlar TI OAD Image Tool ile doldurulmalıdır.
+Debug BIM denemesinde OAD header içindeki `crc32`, `len`, `imgEndAddr` ve segment
+length alanlarının `0xFFFFFFFF` kalması kabul edilebilir. Release veya secure OAD
+akışı için bu alanlar TI OAD Image Tool ile doldurulmalıdır.
 
 ## Kaynaklar
 
