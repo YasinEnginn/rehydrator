@@ -182,6 +182,11 @@ Bu komut sırasıyla şunları yapar:
 3. Her iki ELF çıktısını `arm-none-eabi-objcopy` ile `.hex` ve `.bin` formatına çevirir.
 4. Dosyaları `upload/` klasörüne koyar.
 
+Contiki-NG, ELF dosyalarını `build/` altında hedef ve board bilgisine göre iç içe
+klasörlere koyabilir. Bu yüzden `Makefile`, ELF yolunu sabit varsaymaz; derleme
+sonrası ilgili `old-firmware.simplelink` ve `new-firmware.simplelink` dosyalarını
+`find` ile bulur.
+
 Üretilen firmware dosyaları:
 
 | Dosya | İçerik | Yükleme adresi |
@@ -242,8 +247,10 @@ Kısaca:
 Section adreslerini kontrol etmek için:
 
 ```sh
-arm-none-eabi-readelf -S build/simplelink/sensortag/cc1352r1/simplelink/sensortag/cc1352r1/old-firmware.simplelink
-arm-none-eabi-readelf -S build/simplelink/sensortag/cc1352r1/simplelink/sensortag/cc1352r1/new-firmware.simplelink
+OLD_ELF=$(find build/simplelink/sensortag/cc1352r1 -type f -name old-firmware.simplelink | head -n 1)
+NEW_ELF=$(find build/simplelink/sensortag/cc1352r1 -type f -name new-firmware.simplelink | head -n 1)
+arm-none-eabi-readelf -S "$OLD_ELF"
+arm-none-eabi-readelf -S "$NEW_ELF"
 ```
 
 Beklenen:
@@ -256,8 +263,8 @@ new-firmware: .image_header 0x00000000, .resetVecs 0x00000100
 OAD header içeriğini kontrol etmek için:
 
 ```sh
-arm-none-eabi-objdump -s -j .image_header build/simplelink/sensortag/cc1352r1/simplelink/sensortag/cc1352r1/old-firmware.simplelink
-arm-none-eabi-objdump -s -j .image_header build/simplelink/sensortag/cc1352r1/simplelink/sensortag/cc1352r1/new-firmware.simplelink
+arm-none-eabi-objdump -s -j .image_header "$OLD_ELF"
+arm-none-eabi-objdump -s -j .image_header "$NEW_ELF"
 ```
 
 Kontrol edilen temel alanlar:

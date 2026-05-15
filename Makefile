@@ -32,9 +32,6 @@ MKDIR_P ?= mkdir -p
 UPLOAD_DIR ?= upload
 
 BUILD_DIR = build/$(TARGET)/$(BOARD)
-PROJECT_BUILD_DIR = $(BUILD_DIR)/$(TARGET)/$(BOARD)
-NEW_FIRMWARE_ELF = $(PROJECT_BUILD_DIR)/new-firmware.$(TARGET)
-OLD_FIRMWARE_ELF = $(PROJECT_BUILD_DIR)/old-firmware.$(TARGET)
 
 .PHONY: upload-files new-firmware-upload-files old-firmware-upload-files
 
@@ -43,16 +40,28 @@ upload-files: old-firmware-upload-files new-firmware-upload-files
 new-firmware-upload-files:
 	$(MAKE) TARGET=$(TARGET) BOARD=$(BOARD) LDSCRIPT=new-firmware.ld new-firmware
 	$(MKDIR_P) $(UPLOAD_DIR)
-	$(OBJCOPY) -O ihex $(NEW_FIRMWARE_ELF) $(UPLOAD_DIR)/new-firmware.hex
-	$(OBJCOPY) -O binary --gap-fill 0xFF $(NEW_FIRMWARE_ELF) $(UPLOAD_DIR)/new-firmware.bin
-	@echo "Created $(UPLOAD_DIR)/new-firmware.hex and $(UPLOAD_DIR)/new-firmware.bin"
+	@elf="$$(find "$(BUILD_DIR)" -type f -name "new-firmware.$(TARGET)" | head -n 1)"; \
+	if [ -z "$$elf" ]; then \
+	  echo "Could not find new-firmware.$(TARGET) under $(BUILD_DIR)"; \
+	  exit 1; \
+	fi; \
+	echo "Using $$elf"; \
+	$(OBJCOPY) -O ihex "$$elf" "$(UPLOAD_DIR)/new-firmware.hex"; \
+	$(OBJCOPY) -O binary --gap-fill 0xFF "$$elf" "$(UPLOAD_DIR)/new-firmware.bin"; \
+	echo "Created $(UPLOAD_DIR)/new-firmware.hex and $(UPLOAD_DIR)/new-firmware.bin"
 
 old-firmware-upload-files:
 	$(MAKE) TARGET=$(TARGET) BOARD=$(BOARD) LDSCRIPT=old-firmware.ld old-firmware
 	$(MKDIR_P) $(UPLOAD_DIR)
-	$(OBJCOPY) -O ihex $(OLD_FIRMWARE_ELF) $(UPLOAD_DIR)/old-firmware.hex
-	$(OBJCOPY) -O binary --gap-fill 0xFF $(OLD_FIRMWARE_ELF) $(UPLOAD_DIR)/old-firmware.bin
-	@echo "Created $(UPLOAD_DIR)/old-firmware.hex and $(UPLOAD_DIR)/old-firmware.bin"
+	@elf="$$(find "$(BUILD_DIR)" -type f -name "old-firmware.$(TARGET)" | head -n 1)"; \
+	if [ -z "$$elf" ]; then \
+	  echo "Could not find old-firmware.$(TARGET) under $(BUILD_DIR)"; \
+	  exit 1; \
+	fi; \
+	echo "Using $$elf"; \
+	$(OBJCOPY) -O ihex "$$elf" "$(UPLOAD_DIR)/old-firmware.hex"; \
+	$(OBJCOPY) -O binary --gap-fill 0xFF "$$elf" "$(UPLOAD_DIR)/old-firmware.bin"; \
+	echo "Created $(UPLOAD_DIR)/old-firmware.hex and $(UPLOAD_DIR)/old-firmware.bin"
 
 # Contiki-NG uses a global LDSCRIPT variable, so build the two OAD images
 # separately. Each linker script reserves 0x100 bytes for the TI OAD header
