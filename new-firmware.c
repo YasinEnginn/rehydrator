@@ -18,9 +18,9 @@ PROCESS_THREAD(new_firmware_process, ev, data)
 
   PROCESS_BEGIN();
 
-  LOG_INFO("OAD user firmware running, version=0x%08lx\n",
+  LOG_INFO("[NEW-FW] update image is live, version=0x%08lx\n",
            (unsigned long)OAD_USER_FW_VERSION);
-  LOG_INFO("BIM jumped to user image entry 0x%08lx in slot 0x%08lx\n",
+  LOG_INFO("[NEW-FW] BIM jumped to user entry 0x%08lx in slot 0x%08lx\n",
            (unsigned long)OAD_USER_ENTRY,
            (unsigned long)OAD_USER_IMAGE_BASE);
 
@@ -29,7 +29,7 @@ PROCESS_THREAD(new_firmware_process, ev, data)
   while(1) {
     PROCESS_WAIT_EVENT_UNTIL(ev == PROCESS_EVENT_TIMER && data == &timer);
     tick++;
-    LOG_INFO("new firmware heartbeat %lu\n", tick);
+    LOG_INFO("[NEW-FW] heartbeat %lu; upgraded firmware is running\n", tick);
     leds_toggle(LEDS_RED);
     etimer_reset(&timer);
   }

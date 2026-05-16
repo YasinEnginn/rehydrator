@@ -1,10 +1,13 @@
 ---
-title: "CC1352R Platformunda İkinci Firmware İmajının Yerleştirilmesi ve Boot Sürecinin İncelenmesi"
+title: "CC1352R Platformunda İkinci Firmware İmajının On-Chip Yerleşimi ve Boot Sürecinin İncelenmesi"
 subtitle: "BİL 304 İşletim Sistemleri Dönem Çalışması — 3. İş Parçacığı"
 author: |
-  Yazarlar:  
-  Yasin Engin  
-  El-Hâris Halef (الحارث خلف)
+  Yazarlar:
+  Yasin Engin
+  El-Hâris Halef
+
+  Ondokuz Mayıs Üniversitesi
+  Bilgisayar Mühendisliği Bölümü
 date: "Mayıs 2026"
 lang: tr
 mainfont: "Times New Roman"
@@ -13,6 +16,15 @@ format:
     toc: true
     number-sections: true
     pdf-engine: xelatex
+    documentclass: article
+    geometry:
+      - top=25mm
+      - bottom=25mm
+      - left=25mm
+      - right=25mm
+    fontsize: 11pt
+    linestretch: 1.15
+    colorlinks: true
   docx:
     toc: true
     number-sections: true
@@ -22,11 +34,13 @@ reference-section-title: "Kaynakça"
 
 # Özet
 
-Bu rapor, Texas Instruments CC1352R platformunda iki firmware imajının aynı flash bellek üzerinde güvenli biçimde konumlandırılmasını ve reset sonrasında hangi imajın çalıştırılacağını belirleyen boot sürecini incelemektedir. Çalışma, ağ üzerinden OTA paket aktarımı tasarlamaya değil, üçüncü iş parçacığı olan gerçek donanım yerleşimi ve boot uyarlamasına odaklanır. Bu kapsamda `old-firmware` persistent fallback imajı, `new-firmware` ise BIM tarafından öncelikli değerlendirilen user image olarak ele alınmıştır.
+Bu çalışma kapsamında, Texas Instruments CC1352R platformunda iki firmware imajının aynı flash bellek üzerinde güvenli biçimde konumlandırılması ve reset sonrasında hangi imajın çalıştırılacağını belirleyen boot süreci incelenmiştir. Çalışma, ağ üzerinden OTA paket aktarımı tasarlamaya değil, üçüncü iş parçacığı olan gerçek donanım yerleşimi ve boot uyarlamasına odaklanmaktadır. Bu kapsamda `old-firmware` persistent fallback imajı, `new-firmware` ise BIM tarafından öncelikli değerlendirilen user image olarak ele alınmıştır.
 
-Derleme sonucunda elde edilen ELF, section, sembol ve boyut çıktıları ham halde `docs/report/outputs/` altında saklanmıştır. Ana raporda bu ham çıktıların doğrudan dökümü yerine, bunlardan üretilen karşılaştırmalı tablolar ve kısa teknik yorumlar kullanılmıştır. Sonuç olarak, yeni firmware imajının yalnızca flash belleğe yazılmasının yeterli olmadığı; geçerli OAD image header, doğru reset vector yerleşimi, slot sınırı kontrolü, BIM davranışı ve CCFG korumasının birlikte değerlendirilmesi gerektiği gösterilmiştir.
+Derleme sonucunda elde edilen ELF, section, sembol ve boyut çıktıları doğrulanabilirlik amacıyla `docs/report/outputs/` altında korunmuştur. Ana raporda bu ham çıktıların doğrudan dökümü yerine, bunlardan üretilen karşılaştırmalı tablolar ve kısa teknik yorumlar kullanılmıştır. Sonuç olarak, yeni firmware imajının yalnızca flash belleğe yazılması yeterli kabul edilemez; geçerli OAD image header, doğru reset vector yerleşimi, slot sınırı kontrolü, BIM davranışı ve CCFG koruması birlikte değerlendirilmelidir.
 
 **Anahtar Kelimeler:** CC1352R, firmware güncelleme, BIM, OAD, CCFG, flash yerleşimi, ELF analizi, Contiki-NG, ARM Cortex-M.
+
+**Teknik Etiketler:** Firmware Update | OAD | BIM | CCFG | ARM Cortex-M
 
 # Giriş
 
@@ -34,13 +48,19 @@ Gömülü sistemlerde firmware güncelleme işlemi, yalnızca yeni uygulama kodu
 
 Bu çalışma, BİL 304 dönem çalışmasının üçüncü iş parçacığı için hazırlanmıştır. Proje genel olarak firmware güncelleme bağlamından doğmuş olsa da bu raporun ana konusu Cooja simülasyonu, ACK/NACK mekanizması veya ağ üzerinden veri aktarımı değildir. Burada incelenen problem, Contiki-NG ile derlenen iki uygulama imajının CC1352R üzerinde mevcut TI BIM/OAD boot modeline uygun biçimde yerleştirilmesidir [@contiking; @contiki_simplelink; @ti_bim].
 
-# Çalışmanın Kapsamı
+# Yöntem ve Kapsam
 
 Çalışmada yeni bir bootloader yazılmamış ve TI BIM kaynak kodu değiştirilmemiştir. Bunun yerine firmware tarafındaki linker script, OAD image header ve flash slot adresleri mevcut BIM'in beklediği yapıya göre düzenlenmiştir. `old-firmware`, persistent fallback imajı olarak `0x00030000` başlangıç adresine; `new-firmware`, user image olarak `0x00000000` başlangıç adresine yerleştirilmiştir.
 
-Bu raporda üç temel soruya cevap aranmıştır. Birincisi, firmware imajlarının kod, veri ve RAM bölümleri bakımından ne kadar yer kapladığıdır. İkincisi, bu imajların CC1352R flash haritasında hangi slotlara yerleştiğidir. Üçüncüsü, reset sonrasında hangi imajın çalıştırılacağına uygulama kodunun değil, BIM ve boot zincirinin nasıl karar verdiğidir.
+> **Kapsam Notu:** Bu rapor yalnızca BİL 304 dönem çalışmasının 3. iş parçacığı olan CC1352R gerçekleme ve donanım uyarlama görevini kapsamaktadır. Cooja tabanlı OTA paket aktarımı ve MSP430 ELF analizi bu raporun ana konusu değildir.
 
-# Kullanılan Proje Yapısı
+Bu çalışma kapsamında üç temel soruya cevap aranmıştır. Birincisi, firmware imajlarının kod, veri ve RAM bölümleri bakımından ne kadar yer kapladığıdır. İkincisi, bu imajların CC1352R flash haritasında hangi slotlara yerleştiğidir. Üçüncüsü, reset sonrasında hangi imajın çalıştırılacağına uygulama kodunun değil, BIM ve boot zincirinin nasıl karar verdiğidir.
+
+# Uygulama Mimarisi
+
+**Bu bölümdeki odak:** Firmware imajlarını üreten kaynak dosyalarını, linker betiklerini ve OAD header bileşenlerini tek bir mimari çerçevede değerlendirmek.
+
+**Temel bulgu:** Proje, BIM kaynak kodunu değiştirmeden iki farklı boot rolüne sahip imaj üretmektedir: page 0 user image ve persistent fallback.
 
 Projede iki uygulama kaynak dosyası, iki OAD header kaynağı ve iki linker script birlikte kullanılır. Bu ayrım, aynı kod tabanından farklı boot rollerine sahip iki ayrı firmware imajı üretmeyi sağlar [@rehydrator_repo].
 
@@ -57,11 +77,15 @@ Projede iki uygulama kaynak dosyası, iki OAD header kaynağı ve iki linker scr
 | `new-firmware.ld` | Yeni imajın header ve reset vector adreslerini page 0 user slotuna taşır. |
 | `Makefile` | İmajları ayrı derler, doğru header dosyasını seçer ve HEX/BIN çıktıları üretir. |
 
-Derleme çıktıları `build/simplelink/sensortag/cc1352r1/` altında, cihaza yazılacak HEX/BIN dosyaları ise `upload/` altında oluşur. Rapor kanıtı olarak kullanılan terminal çıktıları ayrıca `docs/report/outputs/` klasöründe saklanmıştır.
+Derleme çıktıları `build/simplelink/sensortag/cc1352r1/` altında, cihaza yazılacak HEX/BIN dosyaları ise `upload/` altında oluşur. Rapor kanıtı olarak kullanılan terminal çıktıları doğrulanabilirlik amacıyla `docs/report/outputs/` klasöründe korunmuştur.
 
-# Firmware İmajlarının Boyut Analizi
+# Deneysel ve Derleme Bulguları
 
-Bu bölümde `old-firmware` ve `new-firmware` imajlarının derleme sonrası bellek kullanımları incelenmiştir. Amaç, iki firmware imajının flash ve RAM üzerindeki etkisini sayısal olarak görmek ve ikinci firmware imajının CC1352R flash belleğinde hangi koşullarda saklanabileceğini değerlendirmektir. Bu analizde derleme çıktılarından elde edilen `.text`, `.data` ve `.bss` değerleri kullanılmıştır.
+**Bu bölümdeki odak:** Derleme çıktılarından elde edilen `.text`, `.data` ve `.bss` değerlerini yorumlayarak firmware imajlarının flash ve RAM etkisini değerlendirmek.
+
+**Temel bulgu:** Her iki imaj da ayrılan slotlara sığmaktadır; `.bss` değeri flash dosya boyutuna değil çalışma zamanı RAM yüküne katkı yapmaktadır.
+
+Bu bölümde `old-firmware` ve `new-firmware` imajlarının derleme sonrası bellek kullanımları incelenmiştir. Bu analiz, iki firmware imajının flash ve RAM üzerindeki etkisini sayısal olarak değerlendirmek ve ikinci firmware imajının CC1352R flash belleğinde hangi koşullarda konumlandırılabileceğini belirlemek üzere gerçekleştirilmiştir. Analizde derleme çıktılarından elde edilen `.text`, `.data` ve `.bss` değerleri kullanılmıştır.
 
 **Tablo 2. `old-firmware` ve `new-firmware` bellek kullanım karşılaştırması**
 
@@ -72,27 +96,36 @@ Bu bölümde `old-firmware` ve `new-firmware` imajlarının derleme sonrası bel
 
 `.text` alanı çalıştırılabilir makine kodunu ve genellikle flash bellekte yer alan program bölümünü temsil eder. `.data` bölümü başlangıç değeri olan global veya statik değişkenleri ifade eder; bu bölümün ilk değerleri flash üzerinde tutulur, çalışma sırasında RAM'e kopyalanır. `.bss` bölümü ise başlangıçta sıfırlanan değişkenlerden oluşur ve doğrudan RAM kullanımını etkiler. Bu nedenle firmware imajının yalnızca dosya boyutuna bakmak yeterli değildir; kodun flash üzerindeki kapladığı alan ile çalışma zamanında RAM üzerinde oluşturduğu yük ayrı ayrı değerlendirilmelidir.
 
-# CC1352R Flash ve RAM Yerleşimi
+# Bellek Yerleşimi ve Boot Analizi
 
-Bu bölümde CC1352R platformu için önerilen flash bellek yerleşimi incelenmiştir. Amaç, persistent fallback olarak tutulan `old-firmware` imajını korurken `new-firmware` imajını page 0 user/update image alanında konumlandırabilmektir. Bu yaklaşımda yeni firmware doğrudan fallback alanının üzerine yazılmaz. Bunun yerine BIM tarafından öncelikli değerlendirilen ayrı bir user image alanında tutulur; metadata ve recovery bölgeleri ise üretim seviyesinde doğrulama, sağlık kontrolü ve geri dönüş mekanizmaları için ayrılmış tasarım alanları olarak değerlendirilir.
+**Bu bölümdeki odak:** İki firmware imajının dahili flash üzerinde çakışmadan konumlandırılıp konumlandırılamayacağını değerlendirmek.
 
-**Tablo 3. CC1352R flash yerleşimi**
+**Temel bulgu:** `new-firmware` page 0 user image slotuna, `old-firmware` persistent fallback slotuna sığmaktadır; BIM/CCFG bölgesi uygulama imajlarından ayrı tutulmuştur.
 
-| Bölge | Başlangıç Adresi | Boyut | Kullanım Amacı | Teknik Not |
-|---|---:|---:|---|---|
-| User image / yeni imaj alanı | `0x00000000` | `0x00030000` | `new-firmware` imajının user/update imajı olarak konumlandığı alan | BIM reset sonrası önce bu alanı değerlendirir |
-| Persistent fallback alanı | `0x00030000` | `0x00022000` | `old-firmware` imajının fallback olarak saklandığı alan | Yeni imaj yoksa veya geçersizse bu imaj çalıştırılır |
-| Metadata alanı | `0x00052000` | `0x00002000` | Üretim seviyesinde sürüm, boyut, CRC ve geçerlilik bilgisinin tutulabileceği ayrılmış alan | Bu çalışmada otomatik metadata yazma gerçeklenmemiştir |
-| Recovery alanı | `0x00054000` | `0x00002000` | Üretim seviyesinde kurtarma veya fallback bilgileri için ayrılmış alan | Otomatik recovery/rollback gelecek çalışma olarak bırakılmıştır |
-| BIM + CCFG alanı | `0x00056000` | `0x00002000` | Boot yöneticisi ve cihaz konfigürasyon alanı | Kesinlikle korunmalıdır |
+Bu bölümde CC1352R platformu için önerilen flash bellek yerleşimi incelenmiştir. Bu yerleşim, persistent fallback olarak tutulan `old-firmware` imajını korurken `new-firmware` imajını page 0 user/update image alanında konumlandırmak üzere tasarlanmıştır. Bu yaklaşımda yeni firmware'in doğrudan fallback alanının üzerine yazılmaması tercih edilmiştir. Bunun yerine imaj, BIM tarafından öncelikli değerlendirilen ayrı bir user image alanında tutulur; metadata ve recovery bölgeleri ise üretim seviyesinde doğrulama, sağlık kontrolü ve geri dönüş mekanizmaları için ayrılmış tasarım alanları olarak değerlendirilir.
 
-Bu yerleşim stratejisinde flash bellek, user image, persistent fallback, metadata, recovery ve BIM/CCFG bölgeleri olarak mantıksal parçalara ayrılmıştır. Page 0 user image alanında güncelleme sonrası çalıştırılması hedeflenen `new-firmware` bulunur. `old-firmware` ise doğrudan bu alanın üzerine yazılmak yerine persistent fallback bölgesinde korunur. Böylece yeni imaj bozuk, eksik veya uyumsuz olsa bile mevcut fallback firmware cihazı tekrar çalıştırabilecek durumda kalır.
+**Tablo 3. CC1352R flash yerleşim özeti**
+
+| Bölge | Başlangıç | Bitiş | Boyut | Rol |
+|---|---:|---:|---:|---|
+| User image | `0x00000000` | `0x0002FFFF` | `0x00030000` | `new-firmware` |
+| Persistent fallback | `0x00030000` | `0x00051FFF` | `0x00022000` | `old-firmware` |
+| Metadata | `0x00052000` | `0x00053FFF` | `0x00002000` | Ayrılmış doğrulama alanı |
+| Recovery | `0x00054000` | `0x00055FFF` | `0x00002000` | Ayrılmış kurtarma alanı |
+| BIM + CCFG | `0x00056000` | `0x00057FFF` | `0x00002000` | Kritik boot alanı |
+
+Tablo 3'te özetlenen yerleşim stratejisinde flash bellek, user image, persistent fallback, metadata, recovery ve BIM/CCFG bölgeleri olarak mantıksal parçalara ayrılmıştır.
+
+- User image alanı, güncelleme sonrası çalıştırılması hedeflenen `new-firmware` için ayrılmıştır.
+- Persistent fallback alanı, user image yoksa veya geçersizse çalıştırılacak `old-firmware` için korunmuştur.
+- Metadata ve recovery alanları bu çalışmada ayrılmış, fakat otomatik metadata yazma veya rollback mekanizması olarak gerçeklenmemiştir.
+- BIM + CCFG alanı boot zinciri için kritik kabul edilmiş ve uygulama imajlarından ayrı tutulmuştur.
 
 Bu çalışmada metadata ve recovery alanları flash yerleşiminde ayrılmıştır. Ancak üretim seviyesinde metadata yazma, sağlık kontrolü ve otomatik rollback mekanizmaları ayrıca geliştirilmelidir. CCFG alanı ise cihazın düşük seviye konfigürasyon bilgilerini içerdiği için normal uygulama veya user/update verisi gibi kullanılmamalıdır.
 
-![CC1352R önerilen flash yerleşimi](figures/flash-layout.png){width=95%}
+![CC1352R önerilen flash yerleşimi](figures/flash-layout.png){width=85%}
 
-Bu bellek haritası, ikinci firmware imajının fallback uygulama alanından ayrı tutulduğunu göstermektedir. Bu ayrım, güvenli güncelleme tasarımı açısından önemlidir. Çünkü çalışan veya kurtarma için saklanan firmware'in üzerine doğrudan yazmak, işlem yarıda kesildiğinde cihazın açılmamasına neden olabilir. Ayrı user/update alanı kullanmak ise yeni imaj doğrulanana kadar fallback sisteminin korunmasını sağlar.
+Bu bellek haritası, ikinci firmware imajının fallback uygulama alanından ayrı tutulduğunu göstermektedir. Bu ayrım, güvenli güncelleme tasarımı açısından önemlidir. Çünkü çalışan veya kurtarma için saklanan firmware'in üzerine doğrudan yazılması, işlem yarıda kesildiğinde cihazın açılmamasına neden olabilir. Ayrı user/update alanı kullanmak ise yeni imaj doğrulanana kadar fallback sisteminin korunmasını sağlar.
 
 **Tablo 4. Derleme çıktısına göre old/new firmware flash planı**
 
@@ -101,17 +134,23 @@ Bu bellek haritası, ikinci firmware imajının fallback uygulama alanından ayr
 | `old-firmware` | `0x00030000 - 0x00051FFF` | `0x00030000 - 0x00042253` | 74324 byte | 64940 byte |
 | `new-firmware` | `0x00000000 - 0x0002FFFF` | `0x00000000 - 0x000120C7` | 73928 byte | 122680 byte |
 
+Tablo 2 ve Tablo 4 farklı ölçümleri göstermektedir. Tablo 2'deki "Toplam" değeri `arm-none-eabi-size` çıktısındaki `.text + .data + .bss` toplamıdır; yani flash yükü ile çalışma zamanı RAM yükünü birlikte ifade eder. Tablo 4'teki Raw BIN boyutu ise cihaza yazılacak ikili imajın flash üzerinde kapladığı alanı gösterir. `.bss` bölümü flash dosyasında fiziksel veri olarak yer almadığı için Raw BIN boyutu, Tablo 2'deki toplam değerden daha küçüktür.
+
 RAM tarafında `old-firmware` ve `new-firmware` aynı uygulama düzenini kullanmaktadır. `.data`, `.bss`, `vtable_ram` ve `.stack` section'ları `0x20000000` tabanlı SRAM bölgesinde yer alır. Bu durum flash slotlarının farklı olmasına rağmen çalışan uygulamanın RAM modelinin aynı kaldığını gösterir.
 
 # Boot Zinciri ve BIM Davranışı
 
-CC1352R platformunda firmware güncelleme süreci yalnızca yeni imajın flash belleğe yazılmasıyla tamamlanmış sayılmaz. Bir firmware imajının çalıştırılabilmesi için reset sonrasında işlemcinin doğru başlangıç adresine yönlendirilmesi, imajın geçerli olduğunun anlaşılması ve hatalı imaj durumunda güvenli geri dönüş yolunun bulunması gerekir. Bu nedenle ikinci firmware imajının flash bellekte veri veya aday imaj olarak tutulması ile bu imajın boot edilebilir hale gelmesi farklı konulardır.
+**Bu bölümdeki odak:** Reset sonrasında hangi imajın çalıştırılacağına neden uygulama kodunun değil boot zincirinin karar verdiğini açıklamak.
+
+**Temel bulgu:** Flash üzerinde yeni imaj bulunması yeterli değildir; BIM veya benzeri bir bootloader imaj başlığını, reset vector yerleşimini ve bütünlük bilgisini değerlendirmelidir.
+
+CC1352R platformunda firmware güncelleme sürecinde yeni imajın yalnızca flash belleğe yazılması yeterli kabul edilemez. Bir firmware imajının çalıştırılabilmesi için reset sonrasında işlemcinin doğru başlangıç adresine yönlendirilmesi, imajın geçerli olduğunun anlaşılması ve hatalı imaj durumunda güvenli geri dönüş yolunun bulunması gerekir. Bu nedenle ikinci firmware imajının flash bellekte veri veya aday imaj olarak tutulması ile bu imajın boot edilebilir hale gelmesi farklı konulardır.
 
 Bu çalışmada `old-firmware`, cihaz üzerinde persistent fallback olarak saklanan güvenli geri dönüş imajı şeklinde değerlendirilmiştir. `new-firmware` ise fallback alanının üzerine yazılmamış, page 0 user/update image alanında saklanan aday imaj olarak ele alınmıştır. Bu yaklaşımda yeni imajın çalıştırılması için reset sonrasında bir boot karar mekanizmasının devreye girmesi gerekir. CC1352R tarafında bu rol, BIM veya benzeri bir bootloader yapısı ile ilişkilendirilebilir [@ti_bim; @ti_oad_overview].
 
-![CC1352R boot karar akışı](figures/boot-chain.png){width=95%}
+![CC1352R boot karar akışı](figures/boot-chain.png){width=70%}
 
-Yukarıdaki boot karar akışı, önerilen reset sonrası seçim sürecini göstermektedir. Reset sonrasında ilk kontrol uygulama seviyesinde değil, boot aşamasında gerçekleşmelidir. Bu nedenle `new-firmware` dosyasının flash bellekte bulunması tek başına yeterli değildir. Boot mekanizması bu imajın başlangıç adresini, boyutunu, sürümünü ve bütünlük bilgisini kontrol edebilmelidir. Yeni imaj geçerli değilse sistemin `old-firmware` ile devam etmesi gerekir. Bu davranış, hatalı firmware nedeniyle cihazın tamamen kullanılamaz hale gelmesini önler.
+Yukarıdaki boot karar akışı, önerilen reset sonrası seçim sürecini göstermektedir. Reset sonrasında ilk kontrol uygulama seviyesinde değil, boot aşamasında gerçekleşmelidir. Bu nedenle `new-firmware` dosyasının flash bellekte bulunması tek başına yeterli değildir. Boot mekanizması bu imajın başlangıç adresini, boyutunu, sürümünü ve bütünlük bilgisini kontrol edebilmelidir. Yeni imajın geçersiz veya bütünlüğü bozulmuş olması durumunda sistemin `old-firmware` ile devam etmesi gerekir. Bu davranış, hatalı firmware nedeniyle cihazın tamamen kullanılamaz hale gelmesini önler.
 
 **Tablo 5. Boot aşamaları**
 
@@ -127,7 +166,11 @@ Bu yapıdaki en kritik nokta, boot kararının uygulama çalıştıktan sonra de
 
 Bu çalışmada tam anlamıyla üretim seviyesinde bir firmware değiştirme sistemi gerçeklenmemiştir. Bunun yerine, CC1352R üzerinde ikinci firmware imajının nasıl konumlandırılabileceği, bu imajın boot süreciyle nasıl ilişkilendirilebileceği ve neden BIM/bootloader desteğine ihtiyaç duyulduğu analiz edilmiştir. Bu projede `new-firmware` için OAD image header `0x00000000` adresine, reset vector ise `0x00000100` adresine yerleştirilmiştir. `old-firmware` için karşılık gelen adresler `0x00030000` ve `0x00030100` değerleridir. Bu ayrım, BIM'in page 0 user image ve persistent fallback imajını farklı rollerle değerlendirebilmesini sağlar.
 
-# CCFG Alanının Önemi
+# CCFG ve Güvenlik Değerlendirmesi
+
+**Bu bölümdeki odak:** CCFG alanının neden normal uygulama veya veri alanı gibi kullanılamayacağını ortaya koymak.
+
+**Temel bulgu:** CCFG'nin bozulması yalnızca uygulama hatası değil, cihazın reset sonrası başlangıç davranışını etkileyen kritik bir sistem riski oluşturur.
 
 CCFG, CC1352R platformunda cihazın düşük seviye konfigürasyon bilgilerinin tutulduğu kritik flash bölgelerinden biridir. Bu alan normal uygulama verisi gibi değerlendirilmemelidir. Çünkü CCFG bölgesi; boot davranışı, cihaz başlangıç ayarları, debug erişimi, flash koruma ayarları ve bazı donanımsal yapılandırmalar üzerinde etkili olabilir. Bu nedenle firmware güncelleme veya UniFlash ile yükleme işlemleri sırasında CCFG alanının yanlışlıkla silinmesi, cihazın beklenen şekilde başlamamasına veya programlama/debug sürecinde erişim problemleri oluşmasına yol açabilir [@ti_rom_bootloader_ccfg; @ti_uniflash].
 
@@ -152,15 +195,19 @@ Bu nedenle firmware güncelleme tasarımında üç temel güvenlik ilkesi izlenm
 | Tüm flash'ın bilinçsizce silinmesi | BIM, CCFG veya çalışan imajın kaybı | UniFlash işlemlerinde seçili erase yöntemi dikkatle kullanılmalıdır |
 | Metadata/recovery alanının CCFG'ye taşması | Boot karar bilgilerinde veya cihaz ayarlarında hata | Boyut kontrolleri build sonrası doğrulama betikleriyle yapılmalıdır |
 
-Sonuç olarak CCFG alanı, firmware güncelleme sürecinde doğrudan üzerine veri yazılabilecek bir bellek alanı değildir. Bu alanın korunması, hem cihazın yeniden başlatılabilirliği hem de debug/programlama erişiminin sürdürülebilirliği açısından önemlidir. Bu nedenle önerilen bellek yerleşiminde CCFG bölgesi en sonda ayrı bir kritik alan olarak bırakılmış ve ikinci firmware imajı için kullanılmamıştır.
+Sonuç olarak CCFG alanı, firmware güncelleme sürecinde sıradan bir veri saklama alanı olarak değerlendirilemez. Bu alanın korunması, hem cihazın yeniden başlatılabilirliği hem de debug/programlama erişiminin sürdürülebilirliği açısından önemlidir. Bu nedenle önerilen bellek yerleşiminde CCFG bölgesi en sonda ayrı bir kritik alan olarak bırakılmış ve ikinci firmware imajı için kullanılmamıştır.
 
-# İkinci Firmware İçin Yerleşim ve Aktivasyon Stratejisi
+# On-Chip Bootloader Alternatifleri ve Aktivasyon Stratejisi
 
-Bu çalışmada ikinci firmware imajı, doğrudan persistent fallback alanının üzerine yazılacak bir imaj olarak değil, page 0 user/update image alanında tutulacak boot edilebilir aday imaj olarak değerlendirilmiştir. Bunun temel nedeni, fallback firmware'in üzerine doğrudan yazma işleminin güvenli olmamasıdır. Flash silme veya yazma işlemi sırasında güç kesintisi, hatalı imaj, adres çakışması veya eksik veri gibi bir durum oluşursa cihazın güvenli geri dönüş yolu da bozulabilir. Bu nedenle yeni firmware ayrı bir user/update slotuna yerleştirilmeli, ardından doğrulanmalı ve ancak bundan sonra boot sürecinde aktif hale getirilmelidir.
+**Bu bölümdeki odak:** İkinci firmware imajının flash üzerinde nasıl aday imaj olarak tutulacağını ve hangi koşullarda aktif hale getirilebileceğini açıklamak.
+
+**Temel bulgu:** Güvenli aktivasyon için page 0 user/update alanı, metadata doğrulaması, image header ve BIM kararı birlikte düşünülmelidir.
+
+Bu çalışmada ikinci firmware imajı, persistent fallback alanının üzerine yazılacak bir imaj olarak değil, page 0 user/update image alanında tutulacak boot edilebilir aday imaj olarak değerlendirilmiştir. Bunun temel nedeni, fallback firmware'in üzerine doğrudan yazma işleminin güvenli olmamasıdır. Flash silme veya yazma işlemi sırasında güç kesintisi, hatalı imaj, adres çakışması veya eksik veri gibi bir durum oluşursa cihazın güvenli geri dönüş yolu da bozulabilir. Bu nedenle yeni firmware ayrı bir user/update slotuna yerleştirilmeli, ardından doğrulanmalı ve ancak bundan sonra boot sürecinde aktif hale getirilmelidir.
 
 Önerilen yapıda `old-firmware`, persistent fallback olarak korunan güvenli geri dönüş imajıdır. `new-firmware` ise page 0 user/update image alanına yerleştirilen yeni uygulama imajıdır. Bu aday imajın güvenli biçimde çalıştırılabilmesi için bootloader/BIM tarafının imaj başlığını, reset vector yerleşimini ve bütünlük bilgisini tanıyabilmesi gerekir. Metadata alanında yeni imajın sürüm bilgisi, imaj boyutu, başlangıç adresi, CRC değeri ve geçerlilik durumu tutulabilir; ancak bu çalışmada otomatik metadata yazma ve rollback mekanizması gerçeklenmemiştir.
 
-Derleme çıktılarından elde edilen boyutlara göre bu projedeki iki firmware imajı aynı anda flash üzerinde saklanabilmektedir. `new-firmware` için ayrılan `0x00000000 - 0x0002FFFF` aralığında 73928 byte'lık imajdan sonra 122680 byte boş alan kalmaktadır. `old-firmware` için ayrılan `0x00030000 - 0x00051FFF` aralığında ise 74324 byte'lık imajdan sonra 64940 byte boş alan kalmaktadır. Bu nedenle şartnamede belirtilen cihaz diskine/data alanına kaydetme fikri, bu raporda flash üzerinde ayrılmış page 0 user/update image alanına yeni imajın yerleştirilmesi şeklinde yorumlanmıştır.
+Derleme çıktılarından elde edilen boyutlara göre bu projedeki iki firmware imajı aynı anda flash üzerinde saklanabilmektedir. `new-firmware` için ayrılan `0x00000000 - 0x0002FFFF` aralığında 73928 byte'lık imajdan sonra 122680 byte boş alan kalmaktadır. `old-firmware` için ayrılan `0x00030000 - 0x00051FFF` aralığında ise 74324 byte'lık imajdan sonra 64940 byte boş alan kalmaktadır. Bu nedenle şartnamede belirtilen cihaz diskine/data alanına kaydetme fikri, bu çalışma kapsamında flash üzerinde ayrılmış page 0 user/update image alanına yeni imajın yerleştirilmesi şeklinde yorumlanmıştır.
 
 | Bileşen | Görevi | Bu Projedeki Kullanımı |
 |---|---|---|
@@ -182,15 +229,47 @@ Derleme çıktılarından elde edilen boyutlara göre bu projedeki iki firmware 
 8. Yeni imaj geçerliyse `new-firmware` seçilir.
 9. Yeni imaj geçersizse sistem `old-firmware` ile çalışmaya devam eder.
 
-![İkinci firmware imajı için önerilen yerleşim ve aktivasyon akışı](figures/activation-strategy.png){width=95%}
+![İkinci firmware imajı için önerilen yerleşim ve aktivasyon akışı](figures/activation-strategy.png){width=75%}
 
-Yukarıdaki aktivasyon akışı, ikinci firmware imajının doğrudan fallback alanının üzerine yazılmadığını; page 0 user/update image alanına yerleştirildiğini, ardından doğrulama ve üretim seviyesinde metadata güncellemesiyle boot sürecine aday hale getirilebileceğini göstermektedir. Bu yaklaşım, hatalı bir firmware imajının cihazı kullanılamaz hale getirmesini önlemek için tercih edilmiştir.
+Yukarıdaki aktivasyon akışı, ikinci firmware imajının fallback alanının üzerine yazılmadığını; page 0 user/update image alanına yerleştirildiğini, ardından doğrulama ve üretim seviyesinde metadata güncellemesiyle boot sürecine aday hale getirilebileceğini göstermektedir. Bu yaklaşım, geçersiz veya bütünlüğü bozulmuş bir firmware imajının cihazı kullanılamaz hale getirmesini önlemek için tercih edilmiştir.
 
 Bu tasarımda en önemli nokta, `new-firmware` imajının flash bellekte bulunmasının tek başına yeterli olmamasıdır. Bir imajın boot edilebilir hale gelmesi için başlangıç adresinin, vektör tablosunun, imaj başlığının ve bütünlük bilgisinin boot mekanizması tarafından tanınabilir olması gerekir. Bu nedenle ikinci firmware imajı, yalnızca uygulama koduyla aktif hale getirilemez. Uygulama kodu çalışırken yeni imajı bir bölgeye yazabilir; fakat reset sonrasında hangi imajın çalıştırılacağına karar verme görevi bootloader/BIM tarafındadır.
 
-Bu yaklaşım aynı zamanda fallback imkânı sağlar. Eğer yeni firmware eksik, bozuk veya uyumsuz ise sistemin mevcut `old-firmware` ile çalışmaya devam etmesi mümkündür. Bu nedenle güvenli firmware güncelleme tasarımında page 0 user/update alanı, metadata kontrolü ve bootloader kararı birlikte düşünülmelidir.
+Bu yaklaşım aynı zamanda fallback imkânı sağlar. Yeni firmware'in eksik, geçersiz veya uyumsuz olması durumunda sistemin mevcut `old-firmware` ile çalışmaya devam etmesi mümkündür. Bu nedenle güvenli firmware güncelleme tasarımında page 0 user/update alanı, metadata kontrolü ve bootloader kararı birlikte düşünülmelidir.
 
-# Riskler ve Sınırlılıklar
+# Bulgular ve Tartışma
+
+Bu bölüm, önceki teknik analizlerden çıkan tasarım kararlarını kısa mühendislik kayıtları halinde özetlemektedir. Bu değerlendirme, çalışmanın yalnızca adres ve çıktı listesinden ibaret kalmamasını; hangi kararın neden verildiğini ve hangi sonuçları doğurduğunu açık biçimde ortaya koymak üzere eklenmiştir.
+
+### Tasarım Kararı 1 — İki Slotlu Flash Yerleşimi
+
+**Karar:** `new-firmware`, page 0 user image alanına; `old-firmware`, persistent fallback alanına yerleştirilmiştir.
+
+**Gerekçe:** Yeni imajın geçersiz veya bütünlüğü bozulmuş olması durumunda cihazın tamamen açılmaz hale gelmemesi için fallback imajının korunması gerekir.
+
+**Sonuç:** Derleme çıktıları, iki imajın aynı anda flash üzerinde saklanabildiğini göstermektedir. `new-firmware` kendi slotunda 122680 byte, `old-firmware` ise kendi slotunda 64940 byte boş alan bırakmaktadır.
+
+### Tasarım Kararı 2 — OAD Header ve Reset Vector Ayrımı
+
+**Karar:** Her imajın ilk `0x100` byte'ı OAD image header için ayrılmış, reset vector tablosu bu alanın sonrasına yerleştirilmiştir.
+
+**Gerekçe:** BIM'in imajı tanıyabilmesi için metadata ve uygulama başlangıç vektörleri beklenen adreslerde bulunmalıdır.
+
+**Sonuç:** `old-firmware` için `.image_header = 0x00030000` ve `.resetVecs = 0x00030100`; `new-firmware` için `.image_header = 0x00000000` ve `.resetVecs = 0x00000100` doğrulanmıştır.
+
+### Tasarım Kararı 3 — CCFG Alanının Uygulama İmajlarından Ayrılması
+
+**Karar:** CCFG alanı normal uygulama veya update verisi için kullanılmamıştır.
+
+**Gerekçe:** CCFG bozulursa sorun yalnızca uygulama düzeyinde kalmaz; cihazın reset sonrası başlangıç davranışı ve debug/programlama erişimi etkilenebilir.
+
+**Sonuç:** BIM + CCFG bölgesi `0x00056000 - 0x00057FFF` aralığında kritik alan olarak bırakılmıştır.
+
+# Sınırlılıklar
+
+**Bu bölümdeki odak:** Tasarımın hangi yönlerinin üretim seviyesinde tamamlanmadığını ve hangi risklerin kaldığını açıkça belirtmek.
+
+**Temel bulgu:** Bu çalışma bellek yerleşimi ve boot uyarlamasını göstermektedir; kriptografik imzalama, otomatik rollback ve tam metadata yönetimi ileriki aşamalarda ele alınmalıdır.
 
 Bu çalışma, CC1352R platformunda ikinci bir firmware imajının flash bellekte nasıl konumlandırılabileceğini ve bu imajın boot süreciyle nasıl ilişkilendirilebileceğini incelemektedir. Ancak çalışma, üretim seviyesinde tam güvenli bir OTA firmware güncelleme sistemi olarak değerlendirilmemelidir. Bunun temel nedeni, gerçek bir firmware değişim sürecinin yalnızca yeni imajı belleğe yazmakla tamamlanmamasıdır. Yeni imajın geçerli olduğunun doğrulanması, boot zinciri tarafından tanınması, hatalı güncelleme durumunda eski imaja geri dönülebilmesi ve kritik bellek bölgelerinin korunması gerekir [@ti_bim; @ti_oad_overview].
 
@@ -215,13 +294,13 @@ Bununla birlikte, yalnızca page 0 user image alanı kullanmak tek başına yete
 
 Bir diğer önemli sınırlılık flash belleğin silme/yazma yapısından kaynaklanmaktadır. Flash bellekte yazma işlemi yapılmadan önce ilgili sektörün silinmesi gerekir. Bu nedenle yanlış adres aralığında yapılacak bir silme işlemi, çalışan uygulama imajını, metadata alanını, BIM bölgesini veya CCFG gibi kritik alanları bozabilir. Kaynak kısıtlı IoT cihazlarında firmware güncelleme süreci; bellek, enerji tüketimi, flash yıpranması ve güvenlik gibi sınırlamalarla birlikte ele alınmalıdır [@arakadakis_otap_survey]. OTAP/OAD literatüründe de bu kısıtlar firmware güncelleme tasarımında önemli başlıklar olarak ele alınmaktadır [@ti_oad_application; @ti_uniflash].
 
-Bu çalışma kapsamında kriptografik imza doğrulama, güvenli anahtar yönetimi, tam rollback, otomatik recovery ve üretim seviyesinde hata kurtarma mekanizmaları ayrıntılı olarak gerçeklenmemiştir. Bunlar, sistemin daha güvenli ve sahada kullanılabilir hale getirilebilmesi için gelecek çalışma başlıkları olarak değerlendirilmelidir.
+Bu çalışma kapsamında kriptografik imza doğrulama, güvenli anahtar yönetimi, tam rollback, otomatik recovery ve üretim seviyesinde hata kurtarma mekanizmaları ayrıntılı olarak gerçeklenmemiştir. Bu başlıklar, sistemin daha güvenli ve sahada kullanılabilir hale getirilebilmesi için ileriki aşamalarda ele alınmalıdır.
 
-# Gelecek Çalışmalar
+## İleriki Aşamalar
 
 Bu çalışma, CC1352R platformunda ikinci firmware imajının flash bellekte nasıl konumlandırılabileceğini ve boot süreciyle nasıl ilişkilendirilebileceğini incelemiştir. Ancak sistemin üretim seviyesinde güvenli, dayanıklı ve tamamen otomatik bir firmware güncelleme mekanizmasına dönüşebilmesi için bazı ek geliştirmelere ihtiyaç vardır.
 
-İlk olarak, gerçek bir BIM/bootloader entegrasyonu yapılmalıdır. Bu çalışmada `new-firmware` imajının page 0 user/update image alanında saklanması ve üretim seviyesinde metadata ile doğrulanması önerilmiştir. Fakat bu imajın reset sonrasında otomatik olarak seçilebilmesi için bootloader tarafında imaj başlığı, sürüm bilgisi, CRC değeri ve başlangıç adresi gibi alanların okunması gerekir. Bu nedenle gelecek aşamada BIM'in aday imajı tanıyacak ve uygun durumda bu imaja dallanacak şekilde yapılandırılması hedeflenebilir.
+İlk olarak, gerçek bir BIM/bootloader entegrasyonu yapılmalıdır. Bu çalışmada `new-firmware` imajının page 0 user/update image alanında saklanması ve üretim seviyesinde metadata ile doğrulanması önerilmiştir. Fakat bu imajın reset sonrasında otomatik olarak seçilebilmesi için bootloader tarafında imaj başlığı, sürüm bilgisi, CRC değeri ve başlangıç adresi gibi alanların okunması gerekir. Bu nedenle ileriki aşamalarda BIM'in aday imajı tanıyacak ve uygun durumda bu imaja dallanacak şekilde yapılandırılması hedeflenebilir.
 
 İkinci olarak, yalnızca CRC tabanlı bütünlük kontrolü yeterli görülmemelidir. CRC, aktarım veya yazma sırasında oluşan bozulmaları tespit etmek için faydalıdır; ancak firmware imajının gerçekten güvenilir bir kaynak tarafından üretildiğini kanıtlamaz. Bu nedenle ileride firmware imajları dijital imza ile doğrulanabilir. Böylece cihaz yalnızca yetkili kişi veya sistem tarafından imzalanmış firmware'i kabul eder.
 
@@ -237,7 +316,7 @@ Son olarak, enerji tüketimi ve flash ömrü daha ayrıntılı incelenebilir. Fl
 
 # Sonuç
 
-Bu raporda CC1352R üzerinde iki firmware imajının aynı flash içinde planlanması, derleme çıktılarından bellek kullanımının çıkarılması ve boot zincirinin firmware aktivasyonu üzerindeki rolü incelenmiştir. `old-firmware` ve `new-firmware` için alınan `size`, `objdump`, `readelf` ve `nm` çıktıları, imajların yalnızca ham binary dosyalar olmadığını; farklı flash/RAM section'larından oluşan çalıştırılabilir ELF imajları olduğunu göstermektedir.
+Bu çalışma kapsamında CC1352R üzerinde iki firmware imajının aynı flash içinde planlanması, derleme çıktılarından bellek kullanımının çıkarılması ve boot zincirinin firmware aktivasyonu üzerindeki rolü incelenmiştir. `old-firmware` ve `new-firmware` için alınan `size`, `objdump`, `readelf` ve `nm` çıktıları, imajların yalnızca ham binary dosyalar olmadığını; farklı flash/RAM section'larından oluşan çalıştırılabilir ELF imajları olduğunu göstermektedir.
 
 Elde edilen sonuçlara göre `new-firmware` page 0 user image slotuna, `old-firmware` ise persistent fallback slotuna sığmaktadır. BIM/CCFG alanı uygulama imajlarından ayrılmış ve korunması gereken özel bölge olarak değerlendirilmiştir. Güvenli firmware geçişi için temel öneri, imajları doğru OAD header ve linker yerleşimiyle üretmek, HEX tabanlı programlama kullanmak ve full chip erase işleminden kaçınmaktır.
 

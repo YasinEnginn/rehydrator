@@ -1,0 +1,12 @@
+flowchart TD
+    A[old-firmware fallback olarak korunur] --> B[new-firmware page 0 user/update alanına yazılır]
+    B --> C[İmaj boyutu ve adres sınırları kontrol edilir]
+    C --> D[CRC / bütünlük doğrulaması yapılır]
+    D --> E{İmaj geçerli mi?}
+    E -- Hayır --> F[old-firmware korunur]
+    E -- Evet --> G[Metadata / image header geçerli hale getirilir]
+    G --> H[Cihaz resetlenir]
+    H --> I[BIM / Bootloader metadata bilgisini okur]
+    I --> J{Yeni imaj boot edilebilir mi?}
+    J -- Evet --> K[new-firmware başlatılır]
+    J -- Hayır --> L[old-firmware ile devam edilir]

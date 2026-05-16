@@ -41,13 +41,13 @@ PROCESS_THREAD(old_firmware_process, ev, data)
 
   PROCESS_BEGIN();
 
-  LOG_INFO("persistent firmware running, version=0x%08lx\n",
+  LOG_INFO("[OLD-FW] fallback image awake, version=0x%08lx\n",
            TO_ULONG(OAD_PERSISTENT_FW_VERSION));
-  LOG_INFO("TI BIM selected the persistent fallback image\n");
+  LOG_INFO("[OLD-FW] BIM picked the backup slot; safe boot is OK\n");
   log_oad_layout();
 
   leds_on(LEDS_GREEN);
-  LOG_INFO("green LED on\n");
+  LOG_INFO("[OLD-FW] green LED requested, serial log is the source of truth\n");
 
   etimer_set(&timer, CLOCK_SECOND);
 
@@ -55,7 +55,7 @@ PROCESS_THREAD(old_firmware_process, ev, data)
     PROCESS_WAIT_EVENT_UNTIL(ev == PROCESS_EVENT_TIMER && data == &timer);
     seconds++;
     leds_on(LEDS_GREEN);
-    LOG_INFO("persistent firmware heartbeat %lu; green LED on\n", seconds);
+    LOG_INFO("[OLD-FW] heartbeat %lu; waiting in fallback mode\n", seconds);
     etimer_reset(&timer);
   }
 

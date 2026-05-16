@@ -151,13 +151,16 @@ yoksa persistent fallback slotundaki `old-firmware` imajına geçer.
 | UniFlash yükleme sırası | [docs/uniflash-guide.md](docs/uniflash-guide.md) |
 | Terimler sözlüğü | [docs/glossary.md](docs/glossary.md) |
 
-## Final Report
+## Final Rapor
 
-This repository includes the final Turkish report prepared for the BİL 304 Term Work 3rd task.
+Bu deponun BİL 304 dönem çalışması 3. iş parçacığı için hazırlanmış Türkçe
+raporu `docs/report/` dizininde bulunur.
 
-- [PDF Report](docs/report/report.pdf)
-- [DOCX Report](docs/report/report.docx)
-- [Report Source](docs/report/report.qmd)
+- [PDF Rapor](docs/report/report.pdf)
+- [DOCX Rapor](docs/report/report.docx)
+- [Rapor Kaynağı](docs/report/report.qmd)
+- [Teknik Çıktılar](docs/report/outputs/)
+- [Rapor Görselleri](docs/report/figures/)
 
 ## Not
 
