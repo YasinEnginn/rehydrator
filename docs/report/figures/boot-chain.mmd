@@ -1,0 +1,8 @@
+flowchart TD
+    A[Reset] --> B[ROM Boot Kodu]
+    B --> C[BIM / Boot Image Manager]
+    C --> D{Geçerli yeni firmware var mı?}
+    D -- Evet --> E[new-firmware başlatılır]
+    D -- Hayır --> F[old-firmware başlatılır]
+    E --> G[Uygulama çalışır]
+    F --> G

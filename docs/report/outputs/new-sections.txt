@@ -1,0 +1,57 @@
+
+build/simplelink/sensortag/cc1352r1/new-firmware.simplelink:     file format elf32-littlearm
+
+Sections:
+Idx Name          Size      VMA       LMA       File off  Algn
+  0 .image_header 00000038  00000000  00000000  00010000  2**0
+                  CONTENTS, ALLOC, LOAD, READONLY, DATA
+  1 .resetVecs    00000040  00000100  00000100  00010100  2**2
+                  CONTENTS, ALLOC, LOAD, READONLY, DATA
+  2 .dmaSpi0RxControlTableEntry 00000010  20001830  20001830  00031830  2**2
+                  ALLOC
+  3 .dmaSpi0TxControlTableEntry 00000010  20001840  20001840  00031830  2**2
+                  ALLOC
+  4 .dmaSpi1RxControlTableEntry 00000010  20001900  20001900  00031830  2**2
+                  ALLOC
+  5 .dmaSpi1TxControlTableEntry 00000010  20001910  20001910  00031830  2**2
+                  ALLOC
+  6 .dmaSpi0RxAltControlTableEntry 00000010  20001a30  20001a30  00031830  2**2
+                  ALLOC
+  7 .dmaSpi0TxAltControlTableEntry 00000010  20001a40  20001a40  00031830  2**2
+                  ALLOC
+  8 .dmaSpi1RxAltControlTableEntry 00000010  20001b00  20001b00  00031830  2**2
+                  ALLOC
+  9 .dmaSpi1TxAltControlTableEntry 00000010  20001b10  20001b10  00031830  2**2
+                  ALLOC
+ 10 .text         000119d4  00000140  00000140  00010140  2**2
+                  CONTENTS, ALLOC, LOAD, READONLY, CODE
+ 11 .ARM.exidx    00000008  00011b14  00011b14  00021b14  2**2
+                  CONTENTS, ALLOC, LOAD, READONLY, DATA
+ 12 .data         000004d4  20001b20  00011b1c  00021b20  2**2
+                  CONTENTS, ALLOC, LOAD, DATA
+ 13 vtable_ram    000000d8  20002000  00011ff0  00022000  2**8
+                  CONTENTS, ALLOC, LOAD, DATA
+ 14 .bss          00003234  200020d8  200020d8  00031830  2**3
+                  ALLOC
+ 15 .stack        00000604  2000530c  2000530c  00031830  2**0
+                  ALLOC
+ 16 .debug_info   00062695  00000000  00000000  000220d8  2**0
+                  CONTENTS, READONLY, DEBUGGING, OCTETS
+ 17 .debug_abbrev 0001385d  00000000  00000000  0008476d  2**0
+                  CONTENTS, READONLY, DEBUGGING, OCTETS
+ 18 .debug_aranges 00002ab8  00000000  00000000  00097fca  2**0
+                  CONTENTS, READONLY, DEBUGGING, OCTETS
+ 19 .debug_ranges 00005908  00000000  00000000  0009aa82  2**0
+                  CONTENTS, READONLY, DEBUGGING, OCTETS
+ 20 .debug_line   0002635b  00000000  00000000  000a038a  2**0
+                  CONTENTS, READONLY, DEBUGGING, OCTETS
+ 21 .debug_str    00014bfc  00000000  00000000  000c66e5  2**0
+                  CONTENTS, READONLY, DEBUGGING, OCTETS
+ 22 .comment      00000137  00000000  00000000  000db2e1  2**0
+                  CONTENTS, READONLY
+ 23 .ARM.attributes 00000030  00000000  00000000  000db418  2**0
+                  CONTENTS, READONLY
+ 24 .debug_frame  000074a0  00000000  00000000  000db448  2**2
+                  CONTENTS, READONLY, DEBUGGING, OCTETS
+ 25 .debug_loc    000223b8  00000000  00000000  000e28e8  2**0
+                  CONTENTS, READONLY, DEBUGGING, OCTETS

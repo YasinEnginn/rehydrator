@@ -1,0 +1,5 @@
+total 2.3M
+drwxr-xr-x 1 root root  512 May 16 09:12 gen
+-rwxr-xr-x 1 root root 1.1M May 16 09:12 new-firmware.simplelink
+drwxr-xr-x 1 root root  512 May 16 09:12 obj
+-rwxr-xr-x 1 root root 1.2M May 16 09:12 old-firmware.simplelink

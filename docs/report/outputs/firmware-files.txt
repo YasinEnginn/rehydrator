@@ -1,0 +1,10 @@
+build/simplelink/sensortag/cc1352r1/new-firmware.simplelink
+build/simplelink/sensortag/cc1352r1/obj/.deps/new-firmware.c.d
+build/simplelink/sensortag/cc1352r1/obj/.deps/old-firmware.c.d
+build/simplelink/sensortag/cc1352r1/obj/new-firmware.o
+build/simplelink/sensortag/cc1352r1/obj/old-firmware.o
+build/simplelink/sensortag/cc1352r1/old-firmware.simplelink
+upload/new-firmware.bin
+upload/new-firmware.hex
+upload/old-firmware.bin
+upload/old-firmware.hex

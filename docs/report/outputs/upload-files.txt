@@ -1,0 +1,5 @@
+total 560K
+-rwxr-xr-x 1 root root  73K May 16 09:12 new-firmware.bin
+-rw-r--r-- 1 root root 203K May 16 09:12 new-firmware.hex
+-rwxr-xr-x 1 root root  73K May 16 09:12 old-firmware.bin
+-rw-r--r-- 1 root root 204K May 16 09:12 old-firmware.hex

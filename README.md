@@ -151,6 +151,14 @@ yoksa persistent fallback slotundaki `old-firmware` imajına geçer.
 | UniFlash yükleme sırası | [docs/uniflash-guide.md](docs/uniflash-guide.md) |
 | Terimler sözlüğü | [docs/glossary.md](docs/glossary.md) |
 
+## Final Report
+
+This repository includes the final Turkish report prepared for the BİL 304 Term Work 3rd task.
+
+- [PDF Report](docs/report/report.pdf)
+- [DOCX Report](docs/report/report.docx)
+- [Report Source](docs/report/report.qmd)
+
 ## Not
 
 Debug BIM denemesinde OAD header içindeki `crc32`, `len`, `imgEndAddr` ve segment

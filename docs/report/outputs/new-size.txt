@@ -1,0 +1,2 @@
+   text	   data	    bss	    dec	    hex	filename
+  72276	   1452	  14520	  88248	  158b8	build/simplelink/sensortag/cc1352r1/new-firmware.simplelink
