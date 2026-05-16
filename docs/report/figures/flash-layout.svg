@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="420" viewBox="0 0 1000 420">
+  <rect width="1000" height="420" fill="#ffffff"/>
+  <style>
+    .title { font: 700 24px Arial, sans-serif; fill: #1f2937; }
+    .label { font: 700 16px Arial, sans-serif; fill: #111827; }
+    .small { font: 13px Arial, sans-serif; fill: #374151; }
+    .addr { font: 12px Consolas, monospace; fill: #4b5563; }
+  </style>
+  <text x="500" y="34" text-anchor="middle" class="title">CC1352R Önerilen Flash Yerleşimi</text>
+
+  <rect x="80" y="70" width="390" height="90" rx="8" fill="#dbeafe" stroke="#2563eb" stroke-width="2"/>
+  <text x="275" y="98" text-anchor="middle" class="label">new-firmware</text>
+  <text x="275" y="123" text-anchor="middle" class="small">Page 0 user/update image</text>
+  <text x="275" y="146" text-anchor="middle" class="addr">0x00000000 - 0x0002FFFF</text>
+
+  <rect x="530" y="70" width="390" height="90" rx="8" fill="#dcfce7" stroke="#16a34a" stroke-width="2"/>
+  <text x="725" y="98" text-anchor="middle" class="label">old-firmware</text>
+  <text x="725" y="123" text-anchor="middle" class="small">Persistent fallback image</text>
+  <text x="725" y="146" text-anchor="middle" class="addr">0x00030000 - 0x00051FFF</text>
+
+  <rect x="80" y="210" width="250" height="86" rx="8" fill="#fef9c3" stroke="#ca8a04" stroke-width="2"/>
+  <text x="205" y="238" text-anchor="middle" class="label">Metadata</text>
+  <text x="205" y="263" text-anchor="middle" class="small">Ayrılmış tasarım alanı</text>
+  <text x="205" y="285" text-anchor="middle" class="addr">0x00052000 - 0x00053FFF</text>
+
+  <rect x="375" y="210" width="250" height="86" rx="8" fill="#ffedd5" stroke="#ea580c" stroke-width="2"/>
+  <text x="500" y="238" text-anchor="middle" class="label">Recovery</text>
+  <text x="500" y="263" text-anchor="middle" class="small">Ayrılmış tasarım alanı</text>
+  <text x="500" y="285" text-anchor="middle" class="addr">0x00054000 - 0x00055FFF</text>
+
+  <rect x="670" y="210" width="250" height="86" rx="8" fill="#fee2e2" stroke="#dc2626" stroke-width="2"/>
+  <text x="795" y="238" text-anchor="middle" class="label">BIM + CCFG</text>
+  <text x="795" y="263" text-anchor="middle" class="small">Korunacak kritik alan</text>
+  <text x="795" y="285" text-anchor="middle" class="addr">0x00056000 - 0x00057FFF</text>
+
+  <path d="M470 115 H530" stroke="#6b7280" stroke-width="2" marker-end="url(#arrow)"/>
+  <path d="M725 160 V186 H205 V210" fill="none" stroke="#6b7280" stroke-width="2" marker-end="url(#arrow)"/>
+  <path d="M330 253 H375" stroke="#6b7280" stroke-width="2" marker-end="url(#arrow)"/>
+  <path d="M625 253 H670" stroke="#6b7280" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <text x="500" y="355" text-anchor="middle" class="small">User/update ve fallback alanları uygulama imajları içindir; BIM/CCFG bölgesi ayrı tutulur.</text>
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#6b7280"/>
+    </marker>
+  </defs>
+</svg>

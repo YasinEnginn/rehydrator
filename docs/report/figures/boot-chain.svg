@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="920" height="620" viewBox="0 0 920 620">
+  <rect width="920" height="620" fill="#ffffff"/>
+  <style>
+    .title { font: 700 24px Arial, sans-serif; fill: #1f2937; }
+    .box { fill: #eef2ff; stroke: #4f46e5; stroke-width: 2; }
+    .decision { fill: #fef3c7; stroke: #d97706; stroke-width: 2; }
+    .ok { fill: #dcfce7; stroke: #16a34a; stroke-width: 2; }
+    .fallback { fill: #fee2e2; stroke: #dc2626; stroke-width: 2; }
+    .text { font: 15px Arial, sans-serif; fill: #111827; }
+    .small { font: 13px Arial, sans-serif; fill: #374151; }
+    .arrow { stroke: #6b7280; stroke-width: 2; fill: none; marker-end: url(#arrow); }
+  </style>
+  <text x="460" y="36" text-anchor="middle" class="title">CC1352R Boot Karar Akışı</text>
+
+  <rect x="340" y="70" width="240" height="52" rx="8" class="box"/>
+  <text x="460" y="102" text-anchor="middle" class="text">Reset</text>
+
+  <rect x="340" y="150" width="240" height="58" rx="8" class="box"/>
+  <text x="460" y="174" text-anchor="middle" class="text">ROM boot kodu</text>
+  <text x="460" y="194" text-anchor="middle" class="small">Donanım başlangıcı</text>
+
+  <rect x="340" y="236" width="240" height="58" rx="8" class="box"/>
+  <text x="460" y="260" text-anchor="middle" class="text">BIM / Bootloader</text>
+  <text x="460" y="280" text-anchor="middle" class="small">İmaj seçimini yapar</text>
+
+  <polygon points="460,330 610,395 460,460 310,395" class="decision"/>
+  <text x="460" y="386" text-anchor="middle" class="text">Page 0 user image</text>
+  <text x="460" y="406" text-anchor="middle" class="text">geçerli mi?</text>
+
+  <rect x="635" y="366" width="220" height="58" rx="8" class="ok"/>
+  <text x="745" y="390" text-anchor="middle" class="text">new-firmware seçilir</text>
+  <text x="745" y="410" text-anchor="middle" class="small">User/update image</text>
+
+  <rect x="65" y="366" width="220" height="58" rx="8" class="fallback"/>
+  <text x="175" y="390" text-anchor="middle" class="text">old-firmware seçilir</text>
+  <text x="175" y="410" text-anchor="middle" class="small">Persistent fallback</text>
+
+  <rect x="340" y="500" width="240" height="62" rx="8" class="box"/>
+  <text x="460" y="525" text-anchor="middle" class="text">Seçilen imaj başlatılır</text>
+  <text x="460" y="545" text-anchor="middle" class="small">Reset vector üzerinden</text>
+
+  <path class="arrow" d="M460 122 V150"/>
+  <path class="arrow" d="M460 208 V236"/>
+  <path class="arrow" d="M460 294 V330"/>
+  <path class="arrow" d="M610 395 H635"/>
+  <path class="arrow" d="M310 395 H285"/>
+  <path class="arrow" d="M745 424 V531 H580"/>
+  <path class="arrow" d="M175 424 V531 H340"/>
+  <text x="624" y="386" class="small">Evet</text>
+  <text x="264" y="386" text-anchor="end" class="small">Hayır</text>
+
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#6b7280"/>
+    </marker>
+  </defs>
+</svg>
