@@ -119,10 +119,10 @@ edildi.
 
 | Dosya | Boyut | Görev |
 | --- | ---: | --- |
-| `upload/old-firmware.bin` | `74264` byte | Eski/persistent fallback imajın raw binary çıktısı |
-| `upload/old-firmware.hex` | `208412` byte | Eski/persistent fallback imajın adres bilgili HEX çıktısı |
-| `upload/new-firmware.bin` | `73896` byte | Yeni/user firmware imajının raw binary çıktısı |
-| `upload/new-firmware.hex` | `207360` byte | Yeni/user firmware imajının adres bilgili HEX çıktısı |
+| `upload/old-firmware.bin` | `74324` byte | Eski/persistent fallback imajın raw binary çıktısı |
+| `upload/old-firmware.hex` | yaklaşık `204K` | Eski/persistent fallback imajın adres bilgili HEX çıktısı |
+| `upload/new-firmware.bin` | `73928` byte | Yeni/user firmware imajının raw binary çıktısı |
+| `upload/new-firmware.hex` | yaklaşık `203K` | Yeni/user firmware imajının adres bilgili HEX çıktısı |
 
 OAD header alanları beklenen slotlarla uyumludur:
 
@@ -135,15 +135,15 @@ HEX dosyalarının veri aralıkları:
 
 | İmaj | OAD header aralığı | Firmware body aralığı |
 | --- | ---: | ---: |
-| `old-firmware.hex` | `0x00030000 - 0x00030037` | `0x00030100 - 0x00042217` |
-| `new-firmware.hex` | `0x00000000 - 0x00000037` | `0x00000100 - 0x000120A7` |
+| `old-firmware.hex` | `0x00030000 - 0x00030037` | `0x00030100 - 0x00042253` |
+| `new-firmware.hex` | `0x00000000 - 0x00000037` | `0x00000100 - 0x000120C7` |
 
 Slot kullanım özeti:
 
 | İmaj | Slot aralığı | Kullanılan aralık | Boş kalan alan |
 | --- | ---: | ---: | ---: |
-| `old-firmware` | `0x00030000 - 0x00051FFF` | `0x00030000 - 0x00042217` | `65000` byte |
-| `new-firmware` | `0x00000000 - 0x0002FFFF` | `0x00000000 - 0x000120A7` | `122712` byte |
+| `old-firmware` | `0x00030000 - 0x00051FFF` | `0x00030000 - 0x00042253` | `64940` byte |
+| `new-firmware` | `0x00000000 - 0x0002FFFF` | `0x00000000 - 0x000120C7` | `122680` byte |
 
 `readelf -S` ile görülen temel section yerleşimleri:
 
@@ -151,8 +151,8 @@ Slot kullanım özeti:
 | --- | ---: | ---: | --- |
 | `.image_header` | `0x00030000` / `0x38` | `0x00000000` / `0x38` | OAD header slot başlangıcında |
 | `.resetVecs` | `0x00030100` / `0x40` | `0x00000100` / `0x40` | Reset vector OAD header sonrası entry adresinde |
-| `.text` | `0x00030140` / `0x11B24` | `0x00000140` / `0x119B4` | Uygulama kodu reset vector sonrası flash'ta |
-| `.ARM.exidx` | `0x00041C64` / `0x8` | `0x00011AF4` / `0x8` | Exception index flash slotu içinde |
+| `.text` | `0x00030140` / `0x11B60` | `0x00000140` / `0x119D4` | Uygulama kodu reset vector sonrası flash'ta |
+| `.ARM.exidx` | `0x00041CA0` / `0x8` | `0x00011B14` / `0x8` | Exception index flash slotu içinde |
 | `.data` | `0x20001B20` / `0x4D4` | `0x20001B20` / `0x4D4` | RAM'e kopyalanacak initialized data |
 | `.bss` | `0x200020D8` / `0x3234` | `0x200020D8` / `0x3234` | RAM'de sıfırlanacak veri alanı |
 | `.stack` | `0x2000530C` / `0x604` | `0x2000530C` / `0x604` | RAM stack alanı |
